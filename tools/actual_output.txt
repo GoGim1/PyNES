@@ -1,0 +1,5 @@
+c004  78         SEI         A:00 X:00 Y:00 P:24 SP:fd
+c005  d8         CLD         A:00 X:00 Y:00 P:24 SP:fd
+c006  a2 ff      LDX #$ff    A:00 X:00 Y:00 P:24 SP:fd
+c008  9a         TXS         A:00 X:ff Y:00 P:a4 SP:fd
+c009  ad 02 20   LDA $2002   A:00 X:ff Y:00 P:a4 SP:ff

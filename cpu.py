@@ -1,19 +1,19 @@
-from tools.tool import fromat, list_to_hex_str
+from tools.tool import fromat
 from cpu_addressing import addressing
-from cpu_exec import *
+from cpu_instr import *
 
 
 class StatusRegister(object):
     def __init__(self):
         self.carry_flag = 0
         self.zero_flag = 0
-        self.irq_disabled_flag = 1
+        self.irq_disabled_flag = 0
         self.decimal_mode_flag = 0
         self.b_flag = 0
         self.overflow_flag = 0
         self.sign_flag = 0
 
-    def show(self):
+    def value(self):
         ret = 0
         ret |= self.carry_flag << 0
         ret |= self.zero_flag << 1
@@ -39,27 +39,35 @@ class StatusRegister(object):
         self.zero_flag = 1 if (data == 0) else 0
 
 
-class Cpu(object):
-    def __init__(self, nes_file, main_memory, save_memory):
-        self.nes_file = nes_file
+class CPU(object):
+    def __init__(self, file, main_memory, save_memory, ppu):
+        self.file = file
         self.mmc_type = 0
         self.save_memory = main_memory
         self.main_memory = save_memory
+        self.ppu = ppu
 
-        self.program_counter = 0xc000
+        self.input_status = [0 for _ in range(8)]
+        self.input_mask = 0
+        self.input_index = 0
+
+        self._NMI = 0xfffa
+        self._RESET = 0xfffc
+        self._IRQ = 0xfffe
+
+        self.program_counter = self.read(self._RESET) | self.read(self._RESET + 1) << 8
         self.accumulator = 0
         self.x_index_register = 0
         self.y_index_register = 0
-        self.stack_pointer = 0xfd
+        self.stack_pointer = 0xff
         self.status_register = StatusRegister()
 
-        # (op_name, addressing_mode, instr_bytes, instr_cycles) 1:accumulator, 2:implied_addressing,
-        # 3:immediate_addressing, 4:absolute_addressing, 5:zero_page_absolute_addressing
+        # (op_name, addressing_mode, instr_bytes, instr_cycles)
+        #  1:accumulator, 2:implied_addressing, 3:immediate_addressing, 4:absolute_addressing, 5:zero_page_absolute_addressing
         # 6:absolute_x_indexed_addressing, 7:absolute_y_indexed_addressing 8:zero_page_x_indexed_addressing,
         # 9:zero_page_y_indexed_addressing, 10:indirect_addressing  11:pre_indexed_indirect_addressing
-        # 12:post_indexed_indirect_addressing, 13:relative_addressing 0                 1        2                  3
-        #  4              5            6            7             8              9           A B           C
-        #    D             E             F
+        # 12:post_indexed_indirect_addressing, 13:relative_addressing
+        #                          0           1              2              3            4              5              6             7             8              9              A            B           C               D           E             F
         self.op_detail = [('BRK', 2, 1, 7), ('ORA', 11, 2, 6), 'STP', ('SLO', 11, 2, 8), ('NOP', 5, 2, 3),
                           ('ORA', 5, 2, 3), ('ASL', 5, 2, 5), ('SLO', 5, 2, 5), ('PHP', 2, 1, 3), ('ORA', 3, 2, 2),
                           ('ASL', 1, 1, 2), ('ANC', 3, 2, 2), ('NOP', 4, 3, 4), ('ORA', 4, 3, 4), ('ASL', 4, 3, 6),
@@ -137,10 +145,21 @@ class Cpu(object):
         if self.mmc_type == 0:
             if addr in range(0, 0x2000):
                 return self.main_memory.read(addr & 0x7ff)
+            elif addr in range(0x2000, 0x4000):
+                addr = addr & 0x7 + 0x2000
+                return self.ppu.read_register(addr)
+            elif addr == 0x4014:
+                assert 0, "TODO"
+            elif addr == 0x4016:
+                ret = self.input_status[self.input_index & self.input_mask]
+                self.input_index += 1
+                return ret
+            elif addr in range(0x4000, 0x4020):
+                return 0  # TODO
             elif addr in range(0x6000, 0x8000):
-                return self.save_memory.read(addr & 0x1fff)
+                assert 0, "TODO: sram"  # return self.save_memory.read(addr & 0x1fff)
             elif addr in range(0x8000, 0x10000):
-                return self.nes_file.prg_rom[addr & 0x3fff]
+                return self.file.prg_rom[addr & 0x3fff]
             else:
                 assert 0, "TODO"
         else:
@@ -149,9 +168,20 @@ class Cpu(object):
     def write(self, addr, data):
         if self.mmc_type == 0:
             if addr in range(0, 0x2000):
-                return self.main_memory.write(addr & 0x7ff, data)
+                self.main_memory.write(addr & 0x7ff, data)
+            elif addr in range(0x2000, 0x4000):
+                addr = addr & 0x7 + 0x2000
+                self.ppu.write_register(addr, data)
+            elif addr == 0x4014:
+                assert 0
+            elif addr == 0x4016:
+                self.input_mask = 0x0 if data & 1 else 0x7
+                if data & 1:
+                    self.input_index = 0
+            elif addr in range(0x4000, 0x4020):
+                pass
             elif addr in range(0x6000, 0x8000):
-                return self.save_memory.write(addr & 0x1fff, data)
+                assert 0, "TODO: sram"  # return self.save_memory.write(addr & 0x1fff, data)
             elif addr in range(0x8000, 0x10000):
                 assert 0, "Can't write to ROM"
             else:
@@ -159,7 +189,8 @@ class Cpu(object):
         else:
             assert 0, "TODO"
 
-    def exec(self, addr):
+    def exec(self):
+        addr = self.program_counter
         instruction, addressing_mode, instr_bytes = self.op_detail[self.read(addr)][0], self.op_detail[self.read(addr)][
             1], self.op_detail[self.read(addr)][2]
 
@@ -175,10 +206,22 @@ class Cpu(object):
             'STA': STA, 'BEQ': BEQ, 'BNE': BNE, 'BIT': BIT, 'BVS': BVS, 'BVC': BVC, 'BMI': BMI,
             'BPL': BPL, 'PHA': PHA, 'PLA': PLA, 'PHP': PHP, 'PLP': PLP, 'AND': AND, 'ORA': ORA,
             'EOR': EOR, 'CMP': CMP, 'CPX': CPX, 'CPY': CPY, 'LSR': LSR, 'ROR': ROR, 'ROL': ROL,
-            'ASL': ASL, 'DCP': DCP, 'SLO': SLO, 'SRE': SRE, 'ISC': ISC, 'RLA': RLA, 'RRA': RRA
+            'ASL': ASL, 'DCP': DCP, 'SLO': SLO, 'SRE': SRE, 'ISC': ISC, 'RLA': RLA, 'RRA': RRA,
+            # 'BRK': BRK
         }[instruction](addressing_mode, self, operand)
 
-    def disassemble(self, addr):
+    def nmi(self):
+        self.ppu.ppu_status.set(self.ppu.ppu_status.value() | 0x80)
+        if self.ppu.ppu_ctrl.value() & 0x80:
+            self.push(self.program_counter >> 8)
+            self.push(self.program_counter)
+            self.push(self.status_register.value())
+            self.status_register.irq_disabled_flag = 1
+            laddr = self.read(self._NMI)
+            haddr = self.read(self._NMI + 1)
+            self.program_counter = laddr | haddr << 8
+
+    def disassemble(self):
         def _get_operands(mode, param):
             if mode == 1:
                 return 'A'
@@ -209,22 +252,25 @@ class Cpu(object):
             else:
                 assert 0, 'Error addressing mode!'
 
+        addr = self.program_counter
         op_index = self.read(addr)
-        instruction, addressing_mode, instr_bytes = self.op_detail[op_index][0], self.op_detail[op_index][1], self.op_detail[op_index][2]
+        instruction, addressing_mode, instr_bytes = self.op_detail[op_index][0], self.op_detail[op_index][1], \
+                                                    self.op_detail[op_index][2]
 
         operand_bytes = []
         for i in range(instr_bytes - 1):
             operand_bytes += [self.read(addr + i + 1)]
-        print('%s  %s %-7s ' % (fromat(addr), fromat(op_index), list_to_hex_str(operand_bytes)), end='')
+        # print('%s  %s %-7s ' % (fromat(addr), fromat(op_index), list_to_hex_str(operand_bytes)), end='')
+        print('%s  ' % (fromat(addr)), end='')
 
         operands = _get_operands(addressing_mode, operand_bytes)
         print('%s %-7s ' % (instruction, operands), end='')
 
         print('A:%s X:%s Y:%s P:%s SP:%s' % (
             fromat(self.accumulator), fromat(self.x_index_register), fromat(self.y_index_register),
-            fromat(self.status_register.show()), fromat(self.stack_pointer)))
+            fromat(self.status_register.value()), fromat(self.stack_pointer)), end='')
 
     def run(self):
-        while True:
-            self.disassemble(self.program_counter)
-            self.exec(self.program_counter)
+        for _ in range(100000):  # while True:
+            self.disassemble()
+            self.exec()
