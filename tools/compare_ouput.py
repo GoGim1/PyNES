@@ -9,9 +9,11 @@ def actual_data(str):
     return str.lower().split()
 
 if __name__=='__main__':
-    expect_output = open('expect_output.txt')
-    actual_output = open('actual_output.txt')
+    expect_output = open('tools\expect_output.txt')
+    actual_output = open('tools\\actual_output.txt')
     line = 0
+    actual_output.readline()
+    actual_output.readline()
     for _ in range(8991):
         line += 1
         expect_str = expect_output.readline()

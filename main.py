@@ -12,8 +12,8 @@ from display import get_pixel
 class Emulator(object):
     def __init__(self, file_name):
         self.nes_file = self.read_nes_file(file_name)
-        self.save_memory = Memory(0x2000)
         self.main_memory = Memory(0x800)
+        self.save_memory = Memory(0x2000)
         self.ppu = PPU(self.nes_file)
         self.cpu = CPU(self.nes_file, self.main_memory, self.save_memory, self.ppu)
 
@@ -83,8 +83,8 @@ while True:
         # nes.ppu.print()
         nes.exec()
     nes.cpu.nmi()
-    for i in range(255):
-        for j in range(239):
+    for i in range(256):
+        for j in range(240):
             screen.set_at((i, j), get_pixel(i, j, nes.ppu))
     pygame.display.update()
 

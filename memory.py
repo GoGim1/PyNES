@@ -7,3 +7,9 @@ class Memory(object):
 
     def write(self, addr, data):
         self.memory[addr] = data
+
+    def __getitem__(self, item):
+        return self.read(item)
+
+    def __setitem__(self, key, value):
+        self.write(key, value)
