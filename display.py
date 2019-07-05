@@ -25,14 +25,12 @@ def get_pixel(x, y, ppu):
     name_table_index = 0
 
     tile_id = (x >> 3) + (y >> 3) * 32
-    pattern_tables_id = ppu.name_tables.read(tile_id + name_table_index * 0x400)
+    pattern_tables_id = ppu.name_tables[tile_id + name_table_index * 0x400]
 
     pattern1 = pattern_tables_id * 16
     pattern2 = pattern1 + 8
 
     offset = y & 0x7
-    # p0 = ppu.pattern_tables.read(pattern1 + offset)
-    # p1 = ppu.pattern_tables.read(pattern2 + offset)
     p0 = ppu.pattern_tables[pattern1 + offset]
     p1 = ppu.pattern_tables[pattern2 + offset]
 
@@ -42,12 +40,12 @@ def get_pixel(x, y, ppu):
     low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
 
     aid = (x >> 5) + (y >> 5) * 8
-    attr = ppu.name_tables.read(name_table_index * 0x400 + aid + (32 * 30))
+    attr = ppu.name_tables[name_table_index * 0x400 + aid + (32 * 30)]
 
     aoffset = ((x & 0x10) >> 3) | ((y & 0x10) >> 2)
     high = (attr & (3 << aoffset)) >> aoffset << 2
 
     index = high | low
 
-    return palette_data[ppu.palette.read(index)]
+    return palette_data[ppu.palette[index]]
 
