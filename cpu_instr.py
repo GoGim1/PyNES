@@ -450,11 +450,10 @@ def RRA(mode, cpu, addr):
     cpu.status_register.bit7 = 1 if (value2 & 0x80) else 0
     cpu.status_register.bit1 = 1 if (value2 == 0) else 0
 
-#
-# def BRK(mode, cpu, addr):
-#     cpu.program_counter += 1
-#     cpu.push(cpu.program_counter >> 8)
-#     cpu.push(cpu.program_counter & 0xFF)
-#     cpu.push(cpu.status_register.show())
-#     cpu.program_counter = cpu.read(IRQ);
-#     PC |= READ(IRQ + 1) << 8;
+
+def BRK(mode, cpu, addr):
+    cpu.program_counter += 1
+    cpu.push(cpu.program_counter >> 8)
+    cpu.push(cpu.program_counter & 0xFF)
+    cpu.push(cpu.status_register.value)
+    cpu.program_counter |= cpu.read(cpu._IRQ + 1) << 8

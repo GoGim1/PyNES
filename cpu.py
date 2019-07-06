@@ -20,7 +20,7 @@ class CPU(object):
         self._RESET = 0xfffc
         self._IRQ = 0xfffe
 
-        self.program_counter = 0xc004  # self.read(self._RESET) | self.read(self._RESET + 1) << 8
+        self.program_counter = self.read(self._RESET) | self.read(self._RESET + 1) << 8
         self.accumulator = 0
         self.x_index_register = 0
         self.y_index_register = 0
@@ -53,10 +53,10 @@ class CPU(object):
 
     def push(self, data):
         self.write(0x100 | self.stack_pointer, data)
-        self.stack_pointer -= 1
+        self.stack_pointer = (self.stack_pointer - 1) & 0xff
 
     def pop(self):
-        self.stack_pointer += 1
+        self.stack_pointer = (self.stack_pointer + 1) & 0xff
         return self.read(0x100 | self.stack_pointer)
 
     def read(self, addr):
@@ -76,8 +76,10 @@ class CPU(object):
                 return 0  # TODO
             elif addr in range(0x6000, 0x8000):
                 assert 0, "TODO: sram"  # return self.save_memory.read(addr & 0x1fff)
-            elif addr in range(0x8000, 0x10000):
-                return self.file.prg_rom[addr & 0x3fff]
+            elif addr in range(0x8000, 0xc000):
+                return self.file.prg_rom[:0x4000][addr & 0x3fff]
+            elif addr in range(0xc000, 0x10000):
+                return self.file.prg_rom[-0x4000:][addr & 0x3fff]
             else:
                 assert 0, "TODO"
         else:
@@ -91,7 +93,14 @@ class CPU(object):
                 addr = addr & 0x7 + 0x2000
                 self.ppu.write_register(addr, data)
             elif addr == 0x4014:
-                assert 0
+                if data in range(0, 0x20):
+                    self.ppu.oam.set(self.main_memory[(data << 8):(data << 8 | 0x100)])
+                elif data in range(0x60, 0x80):
+                    data -= 0x60
+                    self.ppu.oam.set(self.save_memory[(data << 8):(data << 8 | 0x100)])
+                elif data in range(0x80, 0x100):
+                    data -= 0x80
+                    self.ppu.oam.set(self.file.prg_rom[(data << 8):(data << 8 | 0x100)])
             elif addr == 0x4016:
                 self.input_mask = 0x0 if data & 1 else 0x7
                 if data & 1:
@@ -125,7 +134,7 @@ class CPU(object):
             'BPL': BPL, 'PHA': PHA, 'PLA': PLA, 'PHP': PHP, 'PLP': PLP, 'AND': AND, 'ORA': ORA,
             'EOR': EOR, 'CMP': CMP, 'CPX': CPX, 'CPY': CPY, 'LSR': LSR, 'ROR': ROR, 'ROL': ROL,
             'ASL': ASL, 'DCP': DCP, 'SLO': SLO, 'SRE': SRE, 'ISC': ISC, 'RLA': RLA, 'RRA': RRA,
-            # 'BRK': BRK
+            'BRK': BRK
         }[instruction](addressing_mode, self, operand)
 
     def nmi(self):
@@ -185,7 +194,7 @@ class CPU(object):
 
         print('A:%s X:%s Y:%s P:%s SP:%s' % (
             fromat(self.accumulator), fromat(self.x_index_register), fromat(self.y_index_register),
-            fromat(self.status_register.value), fromat(self.stack_pointer)))
+            fromat(self.status_register.value), fromat(self.stack_pointer)), end='')
 
     def run(self):
         for _ in range(100000):  # while True:

@@ -37,7 +37,7 @@ class Emulator(object):
 
 pygame.init()
 screen = pygame.display.set_mode([256, 240])
-nes = Emulator('nes_files/nestest.nes')
+nes = Emulator('nes_files/color_test.nes')
 
 while True:
     for event in pygame.event.get():
@@ -77,8 +77,8 @@ while True:
                 nes.cpu.input_status[6] = 0
             if event.key == pygame.K_d:
                 nes.cpu.input_status[7] = 0
-    for line in range(3000):
-        # print(line, ' ', end='')
+    for line in range(4000):
+        # print(line+1, ' ', end='')
         # nes.disassemble()
         # nes.ppu.print()
         nes.exec()

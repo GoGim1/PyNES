@@ -11,7 +11,6 @@ class Header(object):
         self.four_screen = header[6] >> 3 & 1
 
 
-
 class NesFile(object):
     def __init__(self, header, trainer, prg_rom, chr_rom):
         self.header = header
