@@ -6,7 +6,7 @@ from cpu import CPU
 from file import Header, NesFile
 from memory import Memory
 from ppu import PPU
-from display import get_pixel
+from display import get_pixel, get_sprites
 
 
 class Emulator(object):
@@ -86,6 +86,7 @@ while True:
     for i in range(256):
         for j in range(240):
             screen.set_at((i, j), get_pixel(i, j, nes.ppu))
+    get_sprites(screen, nes.ppu)
     pygame.display.update()
 
 # nes = Emulator('nes_files/nestest.nes')

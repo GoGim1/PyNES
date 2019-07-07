@@ -1,4 +1,3 @@
-# from ppu import PPU
 
 palette_data = [(0x7F, 0x7F, 0x7F), (0x20, 0x00, 0xB0), (0x28, 0x00, 0xB8), (0x60, 0x10, 0xA0),
                 (0x98, 0x20, 0x78), (0xB0, 0x10, 0x30), (0xA0, 0x30, 0x00), (0x78, 0x40, 0x00),
@@ -22,13 +21,14 @@ palette_data = [(0x7F, 0x7F, 0x7F), (0x20, 0x00, 0xB0), (0x28, 0x00, 0xB8), (0x6
 
 
 def get_pixel(x, y, ppu):
-    name_table_index = 0
+    name_table_index = 0  # TODO
+    pattern_base = 0x1000 if ppu.ppu_ctrl.bit4 else 0
 
     tile_id = (x >> 3) + (y >> 3) * 32
     pattern_tables_id = ppu.name_tables[tile_id + name_table_index * 0x400]
 
-    pattern1 = pattern_tables_id * 16
-    pattern2 = pattern1 + 8
+    pattern1 = pattern_tables_id * 16 | pattern_base
+    pattern2 = pattern1 + 8 | pattern_base
 
     offset = y & 0x7
     p0 = ppu.pattern_tables[pattern1 + offset]
@@ -49,3 +49,24 @@ def get_pixel(x, y, ppu):
 
     return palette_data[ppu.palette[index]]
 
+
+def get_sprites(screen, ppu):
+    pattern_base = 0x1000 if ppu.ppu_ctrl.bit3 else 0
+    for i in range(63, -1, -1):
+        data = ppu.oam[i * 4: i * 4 + 4]
+        x, y, attr, pattern_index = data[3], data[0] + 1, data[2], data[1]
+        pattern1 = pattern_base | pattern_index * 16
+        pattern2 = pattern_base | pattern1 + 8
+
+        high = (attr & 3) << 2
+        for yy in range(8):
+            for xx in range(8):
+                p0 = ppu.pattern_tables[pattern1 + yy]
+                p1 = ppu.pattern_tables[pattern2 + yy]
+
+                shift = (~xx) & 0x7
+                mask = 1 << shift
+
+                low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
+
+                screen.set_at((x+xx, y+yy), palette_data[ppu.palette[0x10 & high | low]])
