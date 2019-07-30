@@ -10,14 +10,15 @@ class Memory(object):
         self.memory[addr] = data
 
     def __getitem__(self, item):
-        if isinstance(item, int):
-            return self.read(item)
-        if isinstance(item, slice):
-            start, end = item.start, item.stop
-            ret = []
-            for i in range(start, end):
-                ret.append(self.read(i))
-            return ret
+        # if isinstance(item, int):
+        #     return self.read(item)
+        # if isinstance(item, slice):
+        #     start, end = item.start, item.stop
+        #     ret = []
+        #     for i in range(start, end):
+        #         ret.append(self.read(i))
+        #     return ret
+        return self.read(item)
 
     def __setitem__(self, key, value):
         self.write(key, value)

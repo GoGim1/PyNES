@@ -12,6 +12,10 @@ _pre_indexed_indirect_addressing = 11
 _post_indexed_indirect_addressing = 12
 _relative_addressing = 13
 
+_absolute_x_indexed_addressing_check_oops = 14
+_absolute_y_indexed_addressing_check_oops = 15
+_post_indexed_indirect_addressing_check_oops = 16
+
 
 def addressing(mode, cpu):
     if mode == _accumulator or mode == _implied_addressing:
@@ -44,5 +48,23 @@ def addressing(mode, cpu):
     elif mode == _relative_addressing:
         operand = cpu.read(cpu.program_counter + 1)
         return cpu.program_counter + (operand - 256 if (operand & 0x80) else operand) + 2
+
+    elif mode == _absolute_x_indexed_addressing_check_oops:
+        addr = cpu.read(cpu.program_counter + 1) | cpu.read(cpu.program_counter + 2) << 8
+        ret = (cpu.x_index_register + addr) & 0xffff
+        cpu.cpu_cycle += 1 if addr >> 8 != ret >> 8 else 0
+        return ret
+    elif mode == _absolute_y_indexed_addressing_check_oops:
+        addr = cpu.read(cpu.program_counter + 1) | cpu.read(cpu.program_counter + 2) << 8
+        ret = (cpu.y_index_register + addr) & 0xffff
+        cpu.cpu_cycle += 1 if addr >> 8 != ret >> 8 else 0
+        return ret
+    elif mode == _post_indexed_indirect_addressing_check_oops:
+        operand = cpu.read(cpu.program_counter + 1)
+        addr = cpu.read(operand) | cpu.read((operand + 1) & 0xff) << 8
+        ret = (addr + cpu.y_index_register) & 0xffff
+        cpu.cpu_cycle += 1 if addr >> 8 != ret >> 8 else 0
+        return ret
+
     else:
         assert 0, 'Error addressing mode!'

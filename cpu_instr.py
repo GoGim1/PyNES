@@ -21,6 +21,7 @@ def LDY(mode, cpu, addr):
     cpu.status_register.bit7 = 1 if (cpu.y_index_register & 0x80) else 0
     cpu.status_register.bit1 = 1 if (cpu.y_index_register == 0) else 0
 
+
 def LAY(mode, cpu, addr):
     value = cpu.read(addr)
     cpu.accumulator = cpu.y_index_register = value
@@ -187,6 +188,7 @@ def CLV(mode, cpu, addr):
 
 def BCS(mode, cpu, addr):
     if cpu.status_register.bit0:
+        cpu.cpu_cycle += 2 if cpu.program_counter >> 8 != addr >> 8 else 1
         cpu.program_counter = addr
 
 
@@ -200,6 +202,7 @@ def NOP(mode, cpu, addr):
 
 def BCC(mode, cpu, addr):
     if not cpu.status_register.bit0:
+        cpu.cpu_cycle += 2 if cpu.program_counter >> 8 != addr >> 8 else 1
         cpu.program_counter = addr
 
 
@@ -208,18 +211,19 @@ def LDA(mode, cpu, addr):
     cpu.status_register.bit7 = 1 if (cpu.accumulator & 0x80) else 0
     cpu.status_register.bit1 = 1 if (cpu.accumulator == 0) else 0
 
-
 def STA(mode, cpu, addr):
     cpu.write(addr, cpu.accumulator)
 
 
 def BEQ(mode, cpu, addr):
     if cpu.status_register.bit1:
+        cpu.cpu_cycle += 2 if cpu.program_counter >> 8 != addr >> 8 else 1
         cpu.program_counter = addr
 
 
 def BNE(mode, cpu, addr):
     if not cpu.status_register.bit1:
+        cpu.cpu_cycle += 2 if cpu.program_counter >> 8 != addr >> 8 else 1
         cpu.program_counter = addr
 
 
@@ -232,21 +236,25 @@ def BIT(mode, cpu, addr):
 
 def BVS(mode, cpu, addr):
     if cpu.status_register.bit6:
+        cpu.cpu_cycle += 2 if cpu.program_counter >> 8 != addr >> 8 else 1
         cpu.program_counter = addr
 
 
 def BVC(mode, cpu, addr):
     if not cpu.status_register.bit6:
+        cpu.cpu_cycle += 2 if cpu.program_counter >> 8 != addr >> 8 else 1
         cpu.program_counter = addr
 
 
 def BMI(mode, cpu, addr):
     if cpu.status_register.bit7:
+        cpu.cpu_cycle += 2 if cpu.program_counter >> 8 != addr >> 8 else 1
         cpu.program_counter = addr
 
 
 def BPL(mode, cpu, addr):
     if not cpu.status_register.bit7:
+        cpu.cpu_cycle += 2 if cpu.program_counter >> 8 != addr >> 8 else 1
         cpu.program_counter = addr
 
 

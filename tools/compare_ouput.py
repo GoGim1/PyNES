@@ -3,6 +3,7 @@ def expect_data(str):
     if (ret[-7] == '='):
         ret.pop(-7)
         ret.pop(-6)
+    ret.append(str.lower().split()[-1])
     return ret
 
 def actual_data(str):

@@ -30,7 +30,7 @@ class PPU(object):
               " P_STATUS:" + hex(self.ppu_status.value),
               " OAM_ADDR:" + hex(self.oam_addr),
               " P_SCROLL:" + hex(self.ppu_scroll),
-              " P_ADDR:" + hex(self.ppu_addr),
+              " P_ADDR:" + hex(self.ppu_addr), end=''
               )
 
     def read_register(self, addr):
@@ -80,8 +80,7 @@ class PPU(object):
         if addr in range(0, 0x3f00):
             ret = self.pseudo
             if addr in range(0, 0x2000):
-                assert 0, "TODO"
-                # TODO: self.pseudo = self.pattern_tables.read(addr)
+                self.pseudo = self.pattern_tables[addr]
             else:
                 if self.vmirroring:
                     self.pseudo = self.name_tables[addr & 0x7ff]
@@ -89,7 +88,8 @@ class PPU(object):
                     self.pseudo = self.name_tables[addr & 0x3ff | (addr & 0x800) >> 1]
             return ret
         elif addr in range(0x3f00, 0x4000):
-            return self.palette[addr & 0x1f]
+            index = (addr - 0x3f00) % 0x20
+            return self.palette[index]
         else:
             assert 0, "Error PPU addr"
 
@@ -104,12 +104,12 @@ class PPU(object):
             else:
                 self.name_tables[addr & 0x3ff | (addr & 0x800) >> 1] = data
         elif addr in range(0x3f00, 0x4000):
-            if addr & 0x03:
-                self.palette[addr & 0x1f] = data
-            else:
-                offset = addr & 0xf
-                self.palette[offset] = data
-                self.palette[offset | 0x10] = data
+            index = (addr - 0x3f00) % 0x20
+            if index % 4:
+                self.palette[index] = data
+            elif index == 0 or index == 0x10:
+                self.palette[::4] = [data for _ in range(8)]
+            # print(self.palette.memory)
         else:
             assert 0, "Error PPU addr"
 

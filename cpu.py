@@ -24,31 +24,33 @@ class CPU(object):
         self.accumulator = 0
         self.x_index_register = 0
         self.y_index_register = 0
-        self.stack_pointer = 0xff  # 0xfd
-        self.status_register = Register(0x20)  # Register(0x24)
+        self.stack_pointer = 0xff
+        self.status_register = Register(0x20)
+
+        self.cpu_cycle = 0
 
         # (op_name, addressing_mode, instr_bytes, instr_cycles)
         #  1:accumulator, 2:implied_addressing, 3:immediate_addressing, 4:absolute_addressing, 5:zero_page_absolute_addressing
         # 6:absolute_x_indexed_addressing, 7:absolute_y_indexed_addressing 8:zero_page_x_indexed_addressing,
         # 9:zero_page_y_indexed_addressing, 10:indirect_addressing  11:pre_indexed_indirect_addressing
         # 12:post_indexed_indirect_addressing, 13:relative_addressing
-        #                          0           1              2              3            4              5              6             7             8              9              A            B           C               D           E             F
-        self.op_detail = [('BRK',2, 1,7),('ORA',11,2,6),'STP',        ('SLO',11,2,8),('NOP',5,2,3),('ORA',5,2,3),('ASL',5,2,5),('SLO',5,2,5),('PHP',2,1,3),('ORA',3,2,2),('ASL',1,1,2),('ANC',3,2,2),('NOP',4, 3,4),('ORA',4,3,4),('ASL',4,3,6),('SLO',4,3,6),  # 0
-                          ('BPL',13,2,2),('ORA',12,2,5),'STP',        ('SLO',12,2,8),('NOP',8,2,4),('ORA',8,2,4),('ASL',8,2,6),('SLO',8,2,6),('CLC',2,1,2),('ORA',7,3,4),('NOP',2,1,2),('SLO',7,3,7),('NOP',6, 3,4),('ORA',6,3,4),('ASL',6,3,7),('SLO',6,3,7),  # 1
-                          ('JSR',4, 3,6),('AND',11,2,6),'STP',        ('RLA',11,2,8),('BIT',5,2,3),('AND',5,2,3),('ROL',5,2,5),('RLA',5,2,5),('PLP',2,1,4),('AND',3,2,2),('ROL',1,1,2),'ANC',        ('BIT',4, 3,4),('AND',4,3,4),('ROL',4,3,6),('RLA',4,3,6),  # 2
-                          ('BMI',13,2,2),('AND',12,2,5),'STP',        ('RLA',12,2,8),('NOP',8,2,4),('AND',8,2,4),('ROL',8,2,6),('RLA',8,2,6),('SEC',2,1,2),('AND',7,3,4),('NOP',2,1,2),('RLA',7,3,7),('NOP',6, 3,4),('AND',6,3,4),('ROL',6,3,7),('RLA',6,3,7),  # 3
-                          ('RTI',2, 1,6),('EOR',11,2,6),'STP',        ('SRE',11,2,8),('NOP',5,2,3),('EOR',5,2,3),('LSR',5,2,5),('SRE',5,2,5),('PHA',2,1,3),('EOR',3,2,2),('LSR',1,1,2),('ALR',3,2,2),('JMP',4, 3,3),('EOR',4,3,4),('LSR',4,3,6),('SRE',4,3,6),  # 4
-                          ('BVC',13,2,2),('EOR',12,2,5),'STP',        ('SRE',12,2,8),('NOP',8,2,4),('EOR',8,2,4),('LSR',8,2,6),('SRE',8,2,6),('CLI',2,1,2),('EOR',7,3,4),('NOP',2,1,2),('SRE',7,3,7),('NOP',6, 3,4),('EOR',6,3,4),('LSR',6,3,7),('SRE',6,3,7),  # 5
-                          ('RTS',2, 1,6),('ADC',11,2,6),'STP',        ('RRA',11,2,8),('NOP',5,2,3),('ADC',5,2,3),('ROR',5,2,5),('RRA',5,2,5),('PLA',2,1,4),('ADC',3,2,2),('ROR',1,1,2),('ARR',3,2,2),('JMP',10,3,5),('ADC',4,3,4),('ROR',4,3,6),('RRA',4,3,6),  # 6
-                          ('BVS',13,2,2),('ADC',12,2,5),'STP',        ('RRA',12,2,8),('NOP',8,2,4),('ADC',8,2,4),('ROR',8,2,6),('RRA',8,2,6),('SEI',2,1,2),('ADC',7,3,4),('NOP',2,1,2),('RRA',7,3,7),('NOP',6, 3,4),('ADC',6,3,4),('ROR',6,3,7),('RRA',6,3,7),  # 7
-                          ('NOP',3, 2,2),('STA',11,2,6),('NOP',3,2,2),('SAX',11,2,6),('STY',5,2,3),('STA',5,2,3),('STX',5,2,3),('SAX',5,2,3),('DEY',2,1,2),('NOP',3,2,2),('TXA',2,1,2),'XAA',        ('STY',4, 3,4),('STA',4,3,4),('STX',4,3,4),('SAX',4,3,4),  # 8
-                          ('BCC',13,2,2),('STA',12,2,6),'STP',        'AHX',         ('STY',8,2,4),('STA',8,2,4),('STX',9,2,4),('SAX',9,2,4),('TYA',2,1,2),('STA',7,3,5),('TXS',2,1,2),'TAS',        'SHY',         ('STA',6,3,5),'SHX',        'AHX',          # 9
-                          ('LDY',3, 2,2),('LDA',11,2,6),('LDX',3,2,2),('LAX',11,2,6),('LDY',5,2,3),('LDA',5,2,3),('LDX',5,2,3),('LAX',5,2,3),('TAY',2,1,2),('LDA',3,2,2),('TAX',2,1,2),'LAX',        ('LDY',4, 3,4),('LDA',4,3,4),('LDX',4,3,4),('LAX',4,3,4),  # A
-                          ('BCS',13,2,2),('LDA',12,2,5),'STP',        ('LAX',12,2,5),('LDY',8,2,4),('LDA',8,2,4),('LDX',9,2,4),('LAX',9,2,4),('CLV',2,1,2),('LDA',7,3,4),('TSX',2,1,2),'LAS',        ('LDY',6, 3,4),('LDA',6,3,4),('LDX',7,3,4),('LAX',7,3,4),  # B
-                          ('CPY',3, 2,2),('CMP',11,2,6),('NOP',3,2,2),('DCP',11,2,8),('CPY',5,2,3),('CMP',5,2,3),('DEC',5,2,5),('DCP',5,2,5),('INY',2,1,2),('CMP',3,2,2),('DEX',2,1,2),('AXS',3,2,2),('CPY',4, 3,4),('CMP',4,3,4),('DEC',4,3,6),('DCP',4,3,6),  # C
-                          ('BNE',13,2,2),('CMP',12,2,5),'STP',        ('DCP',12,2,8),('NOP',8,2,4),('CMP',8,2,4),('DEC',8,2,6),('DCP',8,2,6),('CLD',2,1,2),('CMP',7,3,4),('NOP',2,1,2),('DCP',7,3,7),('NOP',6, 3,4),('CMP',6,3,4),('DEC',6,3,7),('DCP',6,3,7),  # D
-                          ('CPX',3, 2,2),('SBC',11,2,6),('NOP',3,2,2),('ISC',11,2,8),('CPX',5,2,3),('SBC',5,2,3),('INC',5,2,5),('ISC',5,2,5),('INX',2,1,2),('SBC',3,2,2),('NOP',2,1,2),('SBC',3,2,2),('CPX',4, 3,4),('SBC',4,3,4),('INC',4,3,6),('ISC',4,3,6),  # E
-                          ('BEQ',13,2,2),('SBC',12,2,5),'STP',        ('ISC',12,2,8),('NOP',8,2,4),('SBC',8,2,4),('INC',8,2,6),('ISC',8,2,6),('SED',2,1,2),('SBC',7,3,4),('NOP',2,1,2),('ISC',7,3,7),('NOP',6, 3,4),('SBC',6,3,4),('INC',6,3,7),('ISC',6,3,7),  # F
+        #                          0           1              2              3            4              5              6             7             8              9              A            B           C                D                E             F
+        self.op_detail = [('BRK',2, 1,7),('ORA',11,2,6),'STP',        ('SLO',11,2,8),('NOP',5,2,3),('ORA',5,2,3),('ASL',5,2,5),('SLO',5,2,5),('PHP',2,1,3),('ORA',3, 2,2),('ASL',1,1,2),('ANC',3, 2,2),('NOP',4, 3,4),('ORA',4, 3,4),('ASL',4, 3,6),('SLO',4, 3,6),  # 0
+                          ('BPL',13,2,2),('ORA',16,2,5),'STP',        ('SLO',12,2,8),('NOP',8,2,4),('ORA',8,2,4),('ASL',8,2,6),('SLO',8,2,6),('CLC',2,1,2),('ORA',15,3,4),('NOP',2,1,2),('SLO',7, 3,7),('NOP',14,3,4),('ORA',14,3,4),('ASL',6, 3,7),('SLO',6, 3,7),  # 1
+                          ('JSR',4, 3,6),('AND',11,2,6),'STP',        ('RLA',11,2,8),('BIT',5,2,3),('AND',5,2,3),('ROL',5,2,5),('RLA',5,2,5),('PLP',2,1,4),('AND',3, 2,2),('ROL',1,1,2),'ANC',         ('BIT',4, 3,4),('AND',4, 3,4),('ROL',4, 3,6),('RLA',4, 3,6),  # 2
+                          ('BMI',13,2,2),('AND',16,2,5),'STP',        ('RLA',12,2,8),('NOP',8,2,4),('AND',8,2,4),('ROL',8,2,6),('RLA',8,2,6),('SEC',2,1,2),('AND',15,3,4),('NOP',2,1,2),('RLA',7, 3,7),('NOP',14,3,4),('AND',14,3,4),('ROL',6, 3,7),('RLA',6, 3,7),  # 3
+                          ('RTI',2, 1,6),('EOR',11,2,6),'STP',        ('SRE',11,2,8),('NOP',5,2,3),('EOR',5,2,3),('LSR',5,2,5),('SRE',5,2,5),('PHA',2,1,3),('EOR',3, 2,2),('LSR',1,1,2),('ALR',3, 2,2),('JMP',4, 3,3),('EOR',4, 3,4),('LSR',4, 3,6),('SRE',4, 3,6),  # 4
+                          ('BVC',13,2,2),('EOR',16,2,5),'STP',        ('SRE',12,2,8),('NOP',8,2,4),('EOR',8,2,4),('LSR',8,2,6),('SRE',8,2,6),('CLI',2,1,2),('EOR',15,3,4),('NOP',2,1,2),('SRE',7, 3,7),('NOP',14,3,4),('EOR',14,3,4),('LSR',6, 3,7),('SRE',6, 3,7),  # 5
+                          ('RTS',2, 1,6),('ADC',11,2,6),'STP',        ('RRA',11,2,8),('NOP',5,2,3),('ADC',5,2,3),('ROR',5,2,5),('RRA',5,2,5),('PLA',2,1,4),('ADC',3, 2,2),('ROR',1,1,2),('ARR',3, 2,2),('JMP',10,3,5),('ADC',4, 3,4),('ROR',4, 3,6),('RRA',4, 3,6),  # 6
+                          ('BVS',13,2,2),('ADC',16,2,5),'STP',        ('RRA',12,2,8),('NOP',8,2,4),('ADC',8,2,4),('ROR',8,2,6),('RRA',8,2,6),('SEI',2,1,2),('ADC',15,3,4),('NOP',2,1,2),('RRA',7, 3,7),('NOP',14,3,4),('ADC',14,3,4),('ROR',6, 3,7),('RRA',6, 3,7),  # 7
+                          ('NOP',3, 2,2),('STA',11,2,6),('NOP',3,2,2),('SAX',11,2,6),('STY',5,2,3),('STA',5,2,3),('STX',5,2,3),('SAX',5,2,3),('DEY',2,1,2),('NOP',3, 2,2),('TXA',2,1,2),'XAA',         ('STY',4, 3,4),('STA',4, 3,4),('STX',4, 3,4),('SAX',4, 3,4),  # 8
+                          ('BCC',13,2,2),('STA',12,2,6),'STP',        'AHX',         ('STY',8,2,4),('STA',8,2,4),('STX',9,2,4),('SAX',9,2,4),('TYA',2,1,2),('STA',7, 3,5),('TXS',2,1,2),'TAS',         'SHY',         ('STA',6, 3,5),'SHX',          'AHX',          # 9
+                          ('LDY',3, 2,2),('LDA',11,2,6),('LDX',3,2,2),('LAX',11,2,6),('LDY',5,2,3),('LDA',5,2,3),('LDX',5,2,3),('LAX',5,2,3),('TAY',2,1,2),('LDA',3, 2,2),('TAX',2,1,2),'LAX',         ('LDY',4, 3,4),('LDA',4, 3,4),('LDX',4, 3,4),('LAX',4, 3,4),  # A
+                          ('BCS',13,2,2),('LDA',16,2,5),'STP',        ('LAX',16,2,5),('LDY',8,2,4),('LDA',8,2,4),('LDX',9,2,4),('LAX',9,2,4),('CLV',2,1,2),('LDA',15,3,4),('TSX',2,1,2),'LAS',         ('LDY',14,3,4),('LDA',14,3,4),('LDX',15,3,4),('LAX',15,3,4),  # B
+                          ('CPY',3, 2,2),('CMP',11,2,6),('NOP',3,2,2),('DCP',11,2,8),('CPY',5,2,3),('CMP',5,2,3),('DEC',5,2,5),('DCP',5,2,5),('INY',2,1,2),('CMP',3, 2,2),('DEX',2,1,2),('AXS',3, 2,2),('CPY',4, 3,4),('CMP',4, 3,4),('DEC',4, 3,6),('DCP',4, 3,6),  # C
+                          ('BNE',13,2,2),('CMP',16,2,5),'STP',        ('DCP',12,2,8),('NOP',8,2,4),('CMP',8,2,4),('DEC',8,2,6),('DCP',8,2,6),('CLD',2,1,2),('CMP',15,3,4),('NOP',2,1,2),('DCP',7, 3,7),('NOP',14,3,4),('CMP',14,3,4),('DEC',6, 3,7),('DCP',6, 3,7),  # D
+                          ('CPX',3, 2,2),('SBC',11,2,6),('NOP',3,2,2),('ISC',11,2,8),('CPX',5,2,3),('SBC',5,2,3),('INC',5,2,5),('ISC',5,2,5),('INX',2,1,2),('SBC',3, 2,2),('NOP',2,1,2),('SBC',3, 2,2),('CPX',4, 3,4),('SBC',4, 3,4),('INC',4, 3,6),('ISC',4, 3,6),  # E
+                          ('BEQ',13,2,2),('SBC',16,2,5),'STP',        ('ISC',12,2,8),('NOP',8,2,4),('SBC',8,2,4),('INC',8,2,6),('ISC',8,2,6),('SED',2,1,2),('SBC',15,3,4),('NOP',2,1,2),('ISC',7, 3,7),('NOP',14,3,4),('SBC',14,3,4),('INC',6, 3,7),('ISC',6, 3,7),  # F
                           ]
 
     def push(self, data):
@@ -118,8 +120,8 @@ class CPU(object):
 
     def exec(self):
         addr = self.program_counter
-        instruction, addressing_mode, instr_bytes = self.op_detail[self.read(addr)][0], self.op_detail[self.read(addr)][
-            1], self.op_detail[self.read(addr)][2]
+        instruction, addressing_mode, instr_bytes, cycles = self.op_detail[self.read(addr)][0], self.op_detail[self.read(addr)][
+            1], self.op_detail[self.read(addr)][2], self.op_detail[self.read(addr)][3]
 
         operand = addressing(addressing_mode, self)
         self.program_counter += instr_bytes
@@ -137,8 +139,9 @@ class CPU(object):
             'BRK': BRK
         }[instruction](addressing_mode, self, operand)
 
+        self.cpu_cycle += cycles
+
     def nmi(self):
-        self.ppu.ppu_status.value = self.ppu.ppu_status.value | 0x80
         if self.ppu.ppu_ctrl.value & 0x80:
             self.push(self.program_counter >> 8)
             self.push(self.program_counter)
@@ -160,9 +163,9 @@ class CPU(object):
                 return '$' + fromat(param[0] | param[1] << 8)
             elif mode == 5:
                 return '$' + fromat(param[0])
-            elif mode == 6:
+            elif mode == 6 or mode == 14:
                 return '$' + fromat(param[0] | param[1] << 8) + ',X'
-            elif mode == 7:
+            elif mode == 7 or mode == 15:
                 return '$' + fromat(param[0] | param[1] << 8) + ',Y'
             elif mode == 8:
                 return '$' + fromat(param[0]) + ',X'
@@ -172,7 +175,7 @@ class CPU(object):
                 return '($' + fromat(param[0] | param[1] << 8) + ')'
             elif mode == 11:
                 return '($' + fromat(param[0]) + ',X)'
-            elif mode == 12:
+            elif mode == 12 or mode == 16:
                 return '($' + fromat(param[0]) + '),Y'
             elif mode == 13:
                 return '$' + fromat(self.program_counter + 2 + (param[0] if not param[0] & 0x80 else param[0] - 256))
@@ -196,7 +199,4 @@ class CPU(object):
             fromat(self.accumulator), fromat(self.x_index_register), fromat(self.y_index_register),
             fromat(self.status_register.value), fromat(self.stack_pointer)), end='')
 
-    def run(self):
-        for _ in range(100000):  # while True:
-            self.disassemble()
-            self.exec()
+        # print(self.cpu_cycle)

@@ -6,11 +6,14 @@ from cpu import CPU
 from file import Header, NesFile
 from memory import Memory
 from ppu import PPU
-from display import get_pixel, get_sprites
+from display import get_pixel, get_sprites, palette_data
 
 
 class Emulator(object):
     def __init__(self, file_name):
+        pygame.init()
+
+        self.screen = pygame.display.set_mode([256, 240])
         self.nes_file = self.read_nes_file(file_name)
         self.main_memory = Memory(0x800)
         self.save_memory = Memory(0x2000)
@@ -26,68 +29,126 @@ class Emulator(object):
             return NesFile(header, trainer, nes_prg_rom, nes_chr_rom)
 
     def run(self):
-        self.cpu.run()
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                exit()
+            elif event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
+                if event.key == pygame.K_u:
+                    self.cpu.input_status[0] = event.type == pygame.KEYDOWN
+                if event.key == pygame.K_i:
+                    self.cpu.input_status[1] = event.type == pygame.KEYDOWN
+                if event.key == pygame.K_j:
+                    self.cpu.input_status[2] = event.type == pygame.KEYDOWN
+                if event.key == pygame.K_k:
+                    self.cpu.input_status[3] = event.type == pygame.KEYDOWN
+                if event.key == pygame.K_w:
+                    self.cpu.input_status[4] = event.type == pygame.KEYDOWN
+                if event.key == pygame.K_s:
+                    self.cpu.input_status[5] = event.type == pygame.KEYDOWN
+                if event.key == pygame.K_a:
+                    self.cpu.input_status[6] = event.type == pygame.KEYDOWN
+                if event.key == pygame.K_d:
+                    self.cpu.input_status[7] = event.type == pygame.KEYDOWN
 
-    def exec(self):
-        self.cpu.exec()
+        cycles_per_scanline = 341 / 3
+        end_of_render = self.cpu.cpu_cycle + (240 + 1) * cycles_per_scanline
+        end_of_vblank = end_of_render + 20 * cycles_per_scanline
+        end_of_flame = self.cpu.cpu_cycle + 29780.5
+        while self.cpu.cpu_cycle < end_of_render:
+            # self.cpu.disassemble()
+            self.cpu.exec()
+        self.ppu.ppu_status.value |= 0x80
+        self.cpu.nmi()
+        while self.cpu.cpu_cycle < end_of_vblank:
+            self.cpu.exec()
+        while self.cpu.cpu_cycle < end_of_flame:
+            self.cpu.exec()
+        for i in range(256):
+            for j in range(240):
+                self.screen.set_at((i, j), get_pixel(i, j, self.ppu))
+        get_sprites(self.screen, self.ppu)
+        pygame.display.update()
 
-    def disassemble(self):
-        self.cpu.disassemble()
+
+class Debugger(Emulator):
+    def __init__(self, file_name):
+        super().__init__(file_name)
+
+        self.debugger_screen = pygame.display.set_mode([256 * 2, 240 * 2])
+        self.screen = self.debugger_screen.subsurface((0, 0), (256, 240))
+        self.palette = self.debugger_screen.subsurface((256, 128), (256, 112))
+        self.pattern_tables = self.debugger_screen.subsurface((256, 0), (256, 128))
+        self.name_tables = self.debugger_screen.subsurface((0, 240), (256 * 2, 240))
+
+    def run(self):
+        super().run()
+
+        for y in range(128):
+            for x in range(128):
+                index = y // 8 * 16 + x // 8
+                y_offset = y % 8
+                p0 = self.ppu.pattern_tables[index * 16 + y_offset]
+                p1 = self.ppu.pattern_tables[index * 16 + 8 + y_offset]
+                shift = (~x) & 0x7
+                mask = 1 << shift
+                value = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
+                self.pattern_tables.set_at((x, y), palette_data[self.ppu.palette[value]])
+        for y in range(128):
+            for x in range(128):
+                index = y // 8 * 16 + x // 8
+                y_offset = y % 8
+                p0 = self.ppu.pattern_tables[index * 16 + y_offset + 0x1000]
+                p1 = self.ppu.pattern_tables[index * 16 + 8 + y_offset + 0x1000]
+                shift = (~x) & 0x7
+                mask = 1 << shift
+                value = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
+                self.pattern_tables.set_at((x+128, y), palette_data[self.ppu.palette[value]])
+
+        for i in range(32):
+            left_top_x, left_top_y = i%16*16, i//16*56
+            right_botton_x, right_botton_y = left_top_x+16, left_top_y+56
+            pygame.draw.rect(self.palette, palette_data[self.ppu.palette[i]], (left_top_x, left_top_y, right_botton_x, right_botton_y))
+
+        pattern_table_base = 0x1000 if self.ppu.ppu_ctrl.bit4 else 0
+        for y in range(240):
+            for x in range(256):
+                index = y // 8 * 32 + x // 8
+                y_offset = y % 8
+                pattern_tables_id = self.ppu.name_tables[index]
+                p0 = self.ppu.pattern_tables[pattern_tables_id * 16 + y_offset + pattern_table_base]
+                p1 = self.ppu.pattern_tables[pattern_tables_id * 16 + 8 + y_offset + pattern_table_base]
+                shift = (~x) & 0x7
+                mask = 1 << shift
+                low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
+                aid = (x >> 5) + (y >> 5) * 8
+                attr = self.ppu.name_tables[aid + (32 * 30)]
+                aoffset = ((x & 0x10) >> 3) | ((y & 0x10) >> 2)
+                high = (attr & (3 << aoffset)) >> aoffset << 2
+                index = high | low
+                self.name_tables.set_at((x, y), palette_data[self.ppu.palette[index]])
+
+        for y in range(240):
+            for x in range(256):
+                index = y // 8 * 32 + x // 8
+                y_offset = y % 8
+                pattern_tables_id = self.ppu.name_tables[index+0x400]
+                p0 = self.ppu.pattern_tables[pattern_tables_id * 16 + y_offset + pattern_table_base]
+                p1 = self.ppu.pattern_tables[pattern_tables_id * 16 + 8 + y_offset + pattern_table_base]
+                shift = (~x) & 0x7
+                mask = 1 << shift
+                low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
+
+                aid = x // 32 + y // 32 * 8
+                attr = self.ppu.name_tables[aid + (32 * 30) + 0x400]
+                aoffset = ((x & 0x10) >> 3) | ((y & 0x10) >> 2)
+                high = (attr & (3 << aoffset)) >> aoffset << 2
+                index = high | low
+                self.name_tables.set_at((x+256, y), palette_data[self.ppu.palette[index]])
+
+        pygame.display.update()
 
 
-pygame.init()
-screen = pygame.display.set_mode([256, 240])
-nes = Emulator('nes_files/color_test.nes')
-
+# nes = Emulator('nes_files/mario.nes')
+nes = Debugger('nes_files/nestest.nes')
 while True:
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            exit()
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_u:
-                nes.cpu.input_status[0] = 1
-            if event.key == pygame.K_i:
-                nes.cpu.input_status[1] = 1
-            if event.key == pygame.K_j:
-                nes.cpu.input_status[2] = 1
-            if event.key == pygame.K_k:
-                nes.cpu.input_status[3] = 1
-            if event.key == pygame.K_w:
-                nes.cpu.input_status[4] = 1
-            if event.key == pygame.K_s:
-                nes.cpu.input_status[5] = 1
-            if event.key == pygame.K_a:
-                nes.cpu.input_status[6] = 1
-            if event.key == pygame.K_d:
-                nes.cpu.input_status[7] = 1
-        elif event.type == pygame.KEYUP:
-            if event.key == pygame.K_u:
-                nes.cpu.input_status[0] = 0
-            if event.key == pygame.K_i:
-                nes.cpu.input_status[1] = 0
-            if event.key == pygame.K_j:
-                nes.cpu.input_status[2] = 0
-            if event.key == pygame.K_k:
-                nes.cpu.input_status[3] = 0
-            if event.key == pygame.K_w:
-                nes.cpu.input_status[4] = 0
-            if event.key == pygame.K_s:
-                nes.cpu.input_status[5] = 0
-            if event.key == pygame.K_a:
-                nes.cpu.input_status[6] = 0
-            if event.key == pygame.K_d:
-                nes.cpu.input_status[7] = 0
-    for line in range(4000):
-        # print(line+1, ' ', end='')
-        # nes.disassemble()
-        # nes.ppu.print()
-        nes.exec()
-    nes.cpu.nmi()
-    for i in range(256):
-        for j in range(240):
-            screen.set_at((i, j), get_pixel(i, j, nes.ppu))
-    get_sprites(screen, nes.ppu)
-    pygame.display.update()
-
-# nes = Emulator('nes_files/nestest.nes')
-# nes.run()
+    nes.run()
