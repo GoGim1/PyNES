@@ -1,6 +1,6 @@
 from memory import Memory
 from register import Register
-
+from display import palette_data
 
 class PPU(object):
     def __init__(self, file):
@@ -113,3 +113,65 @@ class PPU(object):
         else:
             assert 0, "Error PPU addr"
 
+    def render_sprites(self, screen):
+        pattern_base = 0x1000 if self.ppu_ctrl.bit3 else 0
+        is_8x16_mode = self.ppu_ctrl.bit5
+        for i in range(63, -1, -1):
+            data = self.oam[i * 4: i * 4 + 4]
+            x, y, attr, pattern_index = data[3], data[0] + 1, data[2], data[1]
+            if y > 0xEF:
+                continue
+            if is_8x16_mode:
+                pattern1 = pattern_index // 2 * 0x20 + (0 if x % 2 else 0x1000)
+                pattern2 = pattern1 + 16
+            else:
+                pattern1 = pattern_base | pattern_index * 16
+                pattern2 = pattern_base | pattern1 + 8
+
+            high = (attr & 3) << 2
+            for yy in range(16 if is_8x16_mode else 8):
+                for xx in range(8):
+                    p0 = self.pattern_tables[pattern1 + yy]
+                    p1 = self.pattern_tables[pattern2 + yy]
+
+                    shift = (~xx) & 0x7
+                    mask = 1 << shift
+
+                    low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
+                    if low == 0:
+                        continue
+                    screen[x + xx, y + yy] = palette_data[self.palette[0x10 + high | low]]
+
+    def render_background(self, pixels):
+        name_table_index = 0  # TODO
+        pattern_base = 0x1000 if self.ppu_ctrl.bit4 else 0
+
+        for y in range(240):
+            for x in range(256):
+                tile_id = (x >> 3) + (y >> 3) * 32
+                pattern_tables_id = self.name_tables[tile_id + name_table_index * 0x400]
+
+                pattern1 = pattern_tables_id * 16 | pattern_base
+                pattern2 = pattern1 + 8 | pattern_base
+
+                offset = y & 0x7
+                p0 = self.pattern_tables[pattern1 + offset]
+                p1 = self.pattern_tables[pattern2 + offset]
+
+                shift = (~x) & 0x7
+                mask = 1 << shift
+
+                low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
+
+                aid = (x >> 5) + (y >> 5) * 8
+                attr = self.name_tables[name_table_index * 0x400 + aid + (32 * 30)]
+
+                aoffset = ((x & 0x10) >> 3) | ((y & 0x10) >> 2)
+                high = (attr & (3 << aoffset)) >> aoffset << 2
+
+                index = high | low
+
+                pixels[x, y] = palette_data[self.palette[index]]
+
+        # name_table_index = 0  # TODO
+        # pattern_base = 0x1000 if self.ppu_ctrl.bit4 else 0
