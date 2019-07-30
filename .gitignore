@@ -1,6 +1,5 @@
 __pycache__/
 tools/__pycache__/
-nes_ref/
 .idea/
 .env
 .venv
