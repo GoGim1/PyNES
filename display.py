@@ -52,14 +52,19 @@ def get_pixel(x, y, ppu):
 
 def get_sprites(screen, ppu):
     pattern_base = 0x1000 if ppu.ppu_ctrl.bit3 else 0
+    is_8x16_mode = ppu.ppu_ctrl.bit5
     for i in range(63, -1, -1):
         data = ppu.oam[i * 4: i * 4 + 4]
         x, y, attr, pattern_index = data[3], data[0] + 1, data[2], data[1]
-        pattern1 = pattern_base | pattern_index * 16
-        pattern2 = pattern_base | pattern1 + 8
+        if is_8x16_mode:
+            pattern1 = pattern_index // 2 * 0x20 + (0 if x % 2 else 0x1000)
+            pattern2 = pattern1 + 16
+        else:
+            pattern1 = pattern_base | pattern_index * 16
+            pattern2 = pattern_base | pattern1 + 8
 
         high = (attr & 3) << 2
-        for yy in range(8):
+        for yy in range(16 if is_8x16_mode else 8):
             for xx in range(8):
                 p0 = ppu.pattern_tables[pattern1 + yy]
                 p1 = ppu.pattern_tables[pattern2 + yy]
@@ -68,5 +73,6 @@ def get_sprites(screen, ppu):
                 mask = 1 << shift
 
                 low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
-
-                screen.set_at((x+xx, y+yy), palette_data[ppu.palette[0x10 & high | low]])
+                if low == 0:
+                    continue
+                screen.set_at((x+xx, y+yy), palette_data[ppu.palette[0x10 + high | low]])

@@ -119,9 +119,9 @@ class CPU(object):
             assert 0, "TODO"
 
     def exec(self):
-        addr = self.program_counter
-        instruction, addressing_mode, instr_bytes, cycles = self.op_detail[self.read(addr)][0], self.op_detail[self.read(addr)][
-            1], self.op_detail[self.read(addr)][2], self.op_detail[self.read(addr)][3]
+        index = self.read(self.program_counter)
+        instruction, addressing_mode, instr_bytes, cycles = self.op_detail[index][0], self.op_detail[index][
+            1], self.op_detail[index][2], self.op_detail[index][3]
 
         operand = addressing(addressing_mode, self)
         self.program_counter += instr_bytes

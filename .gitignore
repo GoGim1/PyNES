@@ -8,5 +8,5 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
+nes_files/
 test.py
