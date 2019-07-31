@@ -1,6 +1,8 @@
 from memory import Memory
 from register import Register
 from display import palette_data
+import c_render
+
 
 class PPU(object):
     def __init__(self, file):
@@ -172,6 +174,12 @@ class PPU(object):
                 index = high | low
 
                 pixels[x, y] = palette_data[self.palette[index]]
+
+        # name_table_index = 0  # TODO
+        # pattern_base = 0x1000 if self.ppu_ctrl.bit4 else 0
+
+    def render_background_1(self, pixels):
+        c_render.render_background_cython(self.pattern_tables, self.name_tables, self.palette, self.ppu_ctrl.bit4, pixels)
 
         # name_table_index = 0  # TODO
         # pattern_base = 0x1000 if self.ppu_ctrl.bit4 else 0

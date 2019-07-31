@@ -8,5 +8,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+test/
 nes_files/
 test.py
+*.cpp
+*.pyd
+build/

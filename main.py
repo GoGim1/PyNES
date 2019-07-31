@@ -58,6 +58,13 @@ class Emulator(object):
         end_of_vblank = end_of_render + 20 * cycles_per_scanline
         end_of_flame = self.cpu.cpu_cycle + 29780.5
 
+        is_8x16_mode = self.ppu.ppu_ctrl.bit5
+        sprites_number_per_lines = [0 for _ in range(256 + 16)]
+        for index in range(64):
+            for y in range(16 if is_8x16_mode else 8):
+                # print(self.ppu.oam[index * 4], y)
+                sprites_number_per_lines[self.ppu.oam[index * 4] + y] += 1
+
         # ppu render flame
         for line in range(241):
             end_of_scanline = self.cpu.cpu_cycle + cycles_per_scanline
@@ -69,6 +76,8 @@ class Emulator(object):
             # hblank
             if line == self.ppu.oam[0]:
                 self.ppu.ppu_status.bit6 = 1
+            if sprites_number_per_lines[line] > 8:
+                self.ppu.ppu_status.bit5 = 1
         while self.cpu.cpu_cycle < end_of_render:
             self.cpu.exec()
 
@@ -82,7 +91,7 @@ class Emulator(object):
 
         # end of flame, render and show
         if self.ppu.ppu_mask.bit3:
-            self.ppu.render_background(self.pixels)
+            self.ppu.render_background_1(self.pixels)
         if self.ppu.ppu_mask.bit4:
             self.ppu.render_sprites(self.pixels)
 
@@ -90,6 +99,7 @@ class Emulator(object):
         pygame.display.update()
 
         self.ppu.ppu_status.bit6 = 0
+        self.ppu.ppu_status.bit5 = 0
 
 
 class Debugger(Emulator):
@@ -178,7 +188,7 @@ class Debugger(Emulator):
         pygame.display.update()
 
 
-nes = Emulator('nes_files/mario.nes')
-# nes = Debugger('nes_files/mario.nes')
+nes = Emulator('nes_files/nestest.nes')
+# nes = Debugger('nes_files/01.basics.nes')
 while True:
     nes.run()

@@ -1,5 +1,5 @@
 from tools.tool import fromat, list_to_hex_str
-from cpu_addressing import addressing
+from c_cpu_addressing import addressing
 from cpu_instr import *
 from register import Register
 
