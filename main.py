@@ -6,7 +6,7 @@ import numpy as np
 
 from cpu import CPU
 from file import Header, NesFile
-from memory import Memory
+#from memory import Memory
 from ppu import PPU
 from display import palette_data
 
@@ -15,11 +15,10 @@ class Emulator(object):
     def __init__(self, file_name):
         pygame.init()
         self.screen = pygame.display.set_mode([256, 240])
-        self.pixels = np.array([[(0, 0, 0) for _ in range(240)] for _ in range(256)])
 
         self.nes_file = self.read_nes_file(file_name)
-        self.main_memory = Memory(0x800)
-        self.save_memory = Memory(0x2000)
+        self.main_memory = [0 for _ in range(0x800)]
+        self.save_memory = [0 for _ in range(0x2000)]
         self.ppu = PPU(self.nes_file)
         self.cpu = CPU(self.nes_file, self.main_memory, self.save_memory, self.ppu)
 
@@ -91,11 +90,11 @@ class Emulator(object):
 
         # end of flame, render and show
         if self.ppu.ppu_mask.bit3:
-            self.ppu.render_background_1(self.pixels)
+            self.ppu.render_background_1()
         if self.ppu.ppu_mask.bit4:
-            self.ppu.render_sprites(self.pixels)
+            self.ppu.render_sprites()
 
-        pygame.surfarray.blit_array(self.screen, self.pixels)
+        pygame.surfarray.blit_array(self.screen, self.ppu.pixels)
         pygame.display.update()
 
         self.ppu.ppu_status.bit6 = 0
@@ -188,7 +187,7 @@ class Debugger(Emulator):
         pygame.display.update()
 
 
-nes = Emulator('nes_files/nestest.nes')
+nes = Emulator('nes_files/mario.nes')
 # nes = Debugger('nes_files/01.basics.nes')
 while True:
     nes.run()

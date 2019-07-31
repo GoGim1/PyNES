@@ -1,5 +1,6 @@
 from tools.tool import fromat, list_to_hex_str
-from c_cpu_addressing import addressing
+# from c_cpu_addressing import addressing
+from cpu_addressing import addressing
 from cpu_instr import *
 from register import Register
 
@@ -63,9 +64,13 @@ class CPU(object):
 
     def read(self, addr):
         if self.mmc_type == 0:
-            if addr in range(0, 0x2000):
+            if 0x8000 <= addr < 0xc000:
+                return self.file.prg_rom[:0x4000][addr & 0x3fff]
+            elif 0xc000 <= addr < 0x10000:
+                return self.file.prg_rom[-0x4000:][addr & 0x3fff]
+            elif 0 <= addr < 0x2000:
                 return self.main_memory[addr & 0x7ff]
-            elif addr in range(0x2000, 0x4000):
+            elif 0x2000 <= addr < 0x4000:
                 addr = addr & 0x7 + 0x2000
                 return self.ppu.read_register(addr)
             elif addr == 0x4014:
@@ -74,14 +79,10 @@ class CPU(object):
                 ret = self.input_status[self.input_index & self.input_mask]
                 self.input_index += 1
                 return ret
-            elif addr in range(0x4000, 0x4020):
+            elif 0x4000 <= addr < 0x4020:
                 return 0  # TODO
-            elif addr in range(0x6000, 0x8000):
+            elif 0x6000 <= addr < 0x8000:
                 assert 0, "TODO: sram"  # return self.save_memory.read(addr & 0x1fff)
-            elif addr in range(0x8000, 0xc000):
-                return self.file.prg_rom[:0x4000][addr & 0x3fff]
-            elif addr in range(0xc000, 0x10000):
-                return self.file.prg_rom[-0x4000:][addr & 0x3fff]
             else:
                 assert 0, "TODO"
         else:
@@ -89,14 +90,14 @@ class CPU(object):
 
     def write(self, addr, data):
         if self.mmc_type == 0:
-            if addr in range(0, 0x2000):
+            if 0 <= addr < 0x2000:
                 self.main_memory[addr & 0x7ff] = data
-            elif addr in range(0x2000, 0x4000):
+            elif 0x2000 <= addr < 0x4000:
                 addr = addr & 0x7 + 0x2000
                 self.ppu.write_register(addr, data)
             elif addr == 0x4014:
                 if data in range(0, 0x20):
-                    self.ppu.oam.set(self.main_memory[(data << 8):(data << 8 | 0x100)])
+                    self.ppu.oam = self.main_memory[(data << 8):(data << 8 | 0x100)]
                 elif data in range(0x60, 0x80):
                     data -= 0x60
                     self.ppu.oam.set(self.save_memory[(data << 8):(data << 8 | 0x100)])
@@ -107,11 +108,11 @@ class CPU(object):
                 self.input_mask = 0x0 if data & 1 else 0x7
                 if data & 1:
                     self.input_index = 0
-            elif addr in range(0x4000, 0x4020):
+            elif 0x4000 <= addr < 0x4020:
                 pass
-            elif addr in range(0x6000, 0x8000):
+            elif 0x6000 <= addr < 0x8000:
                 assert 0, "TODO: sram"  # return self.save_memory.write(addr & 0x1fff, data)
-            elif addr in range(0x8000, 0x10000):
+            elif 0x8000 <= addr < 0x10000:
                 assert 0, "Can't write to ROM"
             else:
                 assert 0, "TODO"

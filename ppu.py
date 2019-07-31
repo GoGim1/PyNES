@@ -1,7 +1,8 @@
-from memory import Memory
+# from memory import Memory
 from register import Register
 from display import palette_data
 import c_render
+import numpy as np
 
 
 class PPU(object):
@@ -10,21 +11,23 @@ class PPU(object):
         self._vram_addr_write_twice = 0
         self.vmirroring = file.header.vmirroring
 
+        self.pixels = np.array([[0 for _ in range(240)] for _ in range(256)])
+
         # self.pattern_tables = Memory(0x2000)
         self.pattern_tables = list(file.chr_rom)
-        self.name_tables = Memory(0x800)
-        self.palette = Memory(0x20)
-        self.oam = Memory(256)
+        self.name_tables = [0 for _ in range(0x800)]
+        self.palette = [0 for _ in range(0x20)]
+        self.oam = [0 for _ in range(0x256)]
 
-        self.ppu_ctrl = Register(0)         # $2000
-        self.ppu_mask = Register(0)         # $2001
-        self.ppu_status = Register(0)       # $2002
-        self.oam_addr = 0                   # $2003
-        self.oam_data = 0                   # $2004
-        self.ppu_scroll = 0                 # $2005
-        self.ppu_addr = 0                   # $2006
-        self.ppu_data = 0                   # $2007
-        self.oam_dma = 0                    # 4014
+        self.ppu_ctrl = Register(0)  # $2000
+        self.ppu_mask = Register(0)  # $2001
+        self.ppu_status = Register(0)  # $2002
+        self.oam_addr = 0  # $2003
+        self.oam_data = 0  # $2004
+        self.ppu_scroll = 0  # $2005
+        self.ppu_addr = 0  # $2006
+        self.ppu_data = 0  # $2007
+        self.oam_dma = 0  # 4014
 
     def print(self):
         print(" P_CTRL:" + hex(self.ppu_ctrl.value),
@@ -79,9 +82,9 @@ class PPU(object):
     def read_vram(self):
         addr = self.ppu_addr
         self.ppu_addr += (32 if self.ppu_ctrl.bit2 else 1)
-        if addr in range(0, 0x3f00):
+        if 0 <= addr < 0x3f00:
             ret = self.pseudo
-            if addr in range(0, 0x2000):
+            if 0 <= addr < 0x2000:
                 self.pseudo = self.pattern_tables[addr]
             else:
                 if self.vmirroring:
@@ -89,7 +92,7 @@ class PPU(object):
                 else:
                     self.pseudo = self.name_tables[addr & 0x3ff | (addr & 0x800) >> 1]
             return ret
-        elif addr in range(0x3f00, 0x4000):
+        elif 0x3f00 <= addr < 0x4000:
             index = (addr - 0x3f00) % 0x20
             return self.palette[index]
         else:
@@ -98,14 +101,14 @@ class PPU(object):
     def write_vram(self, data):
         addr = self.ppu_addr
         self.ppu_addr += (32 if self.ppu_ctrl.bit2 else 1)
-        if addr in range(0, 0x2000):
+        if 0 <= addr < 0x2000:
             self.pattern_tables[addr] = data
-        elif addr in range(0x2000, 0x3000):
+        elif 0x2000 <= addr < 0x3000:
             if self.vmirroring:
                 self.name_tables[addr & 0x7ff] = data
             else:
                 self.name_tables[addr & 0x3ff | (addr & 0x800) >> 1] = data
-        elif addr in range(0x3f00, 0x4000):
+        elif 0x3f00 <= addr < 0x4000:
             index = (addr - 0x3f00) % 0x20
             if index % 4:
                 self.palette[index] = data
@@ -115,7 +118,7 @@ class PPU(object):
         else:
             assert 0, "Error PPU addr"
 
-    def render_sprites(self, screen):
+    def render_sprites(self):
         pattern_base = 0x1000 if self.ppu_ctrl.bit3 else 0
         is_8x16_mode = self.ppu_ctrl.bit5
         for i in range(63, -1, -1):
@@ -142,9 +145,9 @@ class PPU(object):
                     low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
                     if low == 0:
                         continue
-                    screen[x + xx, y + yy] = palette_data[self.palette[0x10 + high | low]]
+                    self.pixels[x + xx, y + yy] = palette_data[self.palette[0x10 + high | low]]
 
-    def render_background(self, pixels):
+    def render_background(self):
         name_table_index = 0  # TODO
         pattern_base = 0x1000 if self.ppu_ctrl.bit4 else 0
 
@@ -173,13 +176,14 @@ class PPU(object):
 
                 index = high | low
 
-                pixels[x, y] = palette_data[self.palette[index]]
+                self.pixels[x, y] = palette_data[self.palette[index]]
 
         # name_table_index = 0  # TODO
         # pattern_base = 0x1000 if self.ppu_ctrl.bit4 else 0
 
-    def render_background_1(self, pixels):
-        c_render.render_background_cython(self.pattern_tables, self.name_tables, self.palette, self.ppu_ctrl.bit4, pixels)
+    def render_background_1(self):
+        c_render.render_background_cython(self.pattern_tables, self.name_tables, self.palette, self.ppu_ctrl.bit4,
+                                          self.pixels)
 
         # name_table_index = 0  # TODO
         # pattern_base = 0x1000 if self.ppu_ctrl.bit4 else 0
