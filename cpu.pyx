@@ -1,8 +1,8 @@
 # cython: language_level=3
 
 from tools.tool import fromat
-from c_cpu_addressing import addressing
-from c_cpu_instr import *
+#from c_cpu_addressing import addressing
+# from c_cpu_instr import *
 from register import Register
 from libcpp.vector cimport vector
 
@@ -33,7 +33,7 @@ cdef class CPU:
 
     cdef public list op_detail
 
-    cdef public dict op_function
+
     def __init__(self, file, main_memory, save_memory, ppu):
         self.file = file
         self.mmc_type = 0
@@ -83,28 +83,15 @@ cdef class CPU:
                           ]
 
 
-        self.op_function =  {
-            'JMP': JMP, 'LDX': LDX, 'LAX': LAX, 'LDY': LDY, 'LAY': LAY, 'STX': STX, 'SAX': SAX,
-            'STY': STY, 'ADC': ADC, 'SBC': SBC, 'INC': INC, 'DEC': DEC, 'INX': INX, 'DEX': DEX,
-            'INY': INY, 'DEY': DEY, 'TAX': TAX, 'TAY': TAY, 'TXA': TXA, 'TYA': TYA, 'TSX': TSX,
-            'TXS': TXS, 'JSR': JSR, 'RTS': RTS, 'RTI': RTI, 'SEC': SEC, 'SEI': SEI, 'SED': SED,
-            'CLD': CLD, 'CLV': CLV, 'BCS': BCS, 'CLC': CLC, 'NOP': NOP, 'BCC': BCC, 'LDA': LDA,
-            'STA': STA, 'BEQ': BEQ, 'BNE': BNE, 'BIT': BIT, 'BVS': BVS, 'BVC': BVC, 'BMI': BMI,
-            'BPL': BPL, 'PHA': PHA, 'PLA': PLA, 'PHP': PHP, 'PLP': PLP, 'AND': AND, 'ORA': ORA,
-            'EOR': EOR, 'CMP': CMP, 'CPX': CPX, 'CPY': CPY, 'LSR': LSR, 'ROR': ROR, 'ROL': ROL,
-            'ASL': ASL, 'DCP': DCP, 'SLO': SLO, 'SRE': SRE, 'ISC': ISC, 'RLA': RLA, 'RRA': RRA,
-            'BRK': BRK
-        }
-
-    cpdef void push(self, int data):
+    cdef void push(self, int data):
         self.write(0x100 | self.stack_pointer, data)
         self.stack_pointer = (self.stack_pointer - 1) & 0xff
 
-    cpdef int pop(self):
+    cdef int pop(self):
         self.stack_pointer = (self.stack_pointer + 1) & 0xff
         return self.read(0x100 | self.stack_pointer)
 
-    cpdef int read(self, int addr):
+    cdef int read(self, int addr):
         if self.mmc_type == 0:
             if 0x8000 <= addr < 0xc000:
                 return self.file.prg_rom[:0x4000][addr & 0x3fff]
@@ -130,7 +117,7 @@ cdef class CPU:
         else:
             assert 0, "TODO"
 
-    cpdef write(self, int addr, int data):
+    cdef void write(self, int addr, int data):
         if self.mmc_type == 0:
             if 0 <= addr < 0x2000:
                 self.main_memory[addr & 0x7ff] = data
@@ -161,7 +148,10 @@ cdef class CPU:
         else:
             assert 0, "TODO"
 
-    cpdef void exec_op(self):
+    def exec_op(self):
+        self._exec_op()
+
+    cdef void _exec_op(self):
         cdef int index, addressing_mode, instr_bytes, operand, cycles
         cdef str instruction
 
@@ -169,10 +159,11 @@ cdef class CPU:
         op_detail = self.op_detail[index]
         instruction, addressing_mode, instr_bytes, cycles = op_detail[0], op_detail[1], op_detail[2], op_detail[3]
 
-        operand = addressing(addressing_mode, self)
+        operand = self.addressing(addressing_mode)
         self.program_counter += instr_bytes
 
-        self.op_function[instruction](addressing_mode, self, operand)
+        # self.op_function[instruction](addressing_mode, self, operand)
+        self.exec_instr(instruction, operand, addressing_mode)
 
         self.cpu_cycle += cycles
 
@@ -216,7 +207,7 @@ cdef class CPU:
             else:
                 assert 0, 'Error addressing mode!'
 
-    cpdef disassemble(self):
+    cdef disassemble(self):
         addr = self.program_counter
         op_index = self.read(addr)
         instruction, addressing_mode, instr_bytes = self.op_detail[op_index][0], self.op_detail[op_index][1], self.op_detail[op_index][2]
@@ -235,3 +226,405 @@ cdef class CPU:
         #     fromat(self.status_register.value), fromat(self.stack_pointer)), end='')
 
         # print(self.cpu_cycle)
+
+    cdef int addressing(self, int mode):
+        cdef int addr, bug_addr, operand, ret
+
+        if mode == 1 or mode == 2:
+            return 0
+        elif mode == 3:
+            return self.program_counter + 1
+        elif mode == 4:
+            return self.read(self.program_counter + 1) | self.read(self.program_counter + 2) << 8
+        elif mode == 5:
+            return self.read(self.program_counter + 1)
+        elif mode == 6:
+            return (self.x_index_register + (self.read(self.program_counter + 1) | self.read(self.program_counter + 2) << 8)) & 0xffff
+        elif mode == 7:
+            return (self.y_index_register + (self.read(self.program_counter + 1) | self.read(self.program_counter + 2) << 8)) & 0xffff
+        elif mode == 8:
+            return (self.x_index_register + self.read(self.program_counter + 1)) & 0xff
+        elif mode == 9:
+            return (self.y_index_register + self.read(self.program_counter + 1)) & 0xff
+        elif mode == 10:
+            addr = self.read(self.program_counter + 1) | self.read(self.program_counter + 2) << 8
+            bug_addr = (addr & 0xff00) | ((addr + 1) & 0x00ff)
+            return self.read(addr) | self.read(bug_addr) << 8
+        elif mode == 11:
+            addr = (self.read(self.program_counter + 1) + self.x_index_register) & 0xff
+            return self.read(addr) | self.read((addr + 1) & 0xff) << 8  # addr == FF, addr+1 == 00
+        elif mode == 12:
+            operand = self.read(self.program_counter + 1)
+            addr = self.read(operand) | self.read((operand + 1) & 0xff) << 8
+            return (addr + self.y_index_register) & 0xffff
+        elif mode == 13:
+            operand = self.read(self.program_counter + 1)
+            return self.program_counter + (operand - 256 if (operand & 0x80) else operand) + 2
+
+        elif mode == 14:
+            addr = self.read(self.program_counter + 1) | self.read(self.program_counter + 2) << 8
+            ret = (self.x_index_register + addr) & 0xffff
+            self.cpu_cycle += 1 if addr >> 8 != ret >> 8 else 0
+            return ret
+        elif mode == 15:
+            addr = self.read(self.program_counter + 1) | self.read(self.program_counter + 2) << 8
+            ret = (self.y_index_register + addr) & 0xffff
+            self.cpu_cycle += 1 if addr >> 8 != ret >> 8 else 0
+            return ret
+        elif mode == 16:
+            operand = self.read(self.program_counter + 1)
+            addr = self.read(operand) | self.read((operand + 1) & 0xff) << 8
+            ret = (addr + self.y_index_register) & 0xffff
+            self.cpu_cycle += 1 if addr >> 8 != ret >> 8 else 0
+            return ret
+
+        else:
+            assert 0, 'Error addressing mode!'
+
+    cdef void exec_instr(self, str instruction, int operand, int addressing_mode):
+        cdef int result, value
+
+        if instruction == 'JMP':
+            self.program_counter = operand
+        elif instruction == 'LDX':
+            self.x_index_register = self.read(operand)
+            self.status_register.bit7 = 1 if (self.x_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.x_index_register == 0) else 0
+        elif instruction == 'LAX':
+            value = self.read(operand)
+            self.accumulator = self.x_index_register = value
+            self.status_register.bit7 = 1 if (value & 0x80) else 0
+            self.status_register.bit1 = 1 if (value == 0) else 0
+        elif instruction == 'LDY':
+            operand = self.read(operand)
+            self.y_index_register = operand
+            self.status_register.bit7 = 1 if (self.y_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.y_index_register == 0) else 0
+        elif instruction == 'LAY':
+            value = self.read(operand)
+            self.accumulator = self.y_index_register = value
+            self.status_register.bit7 = 1 if (value & 0x80) else 0
+            self.status_register.bit1 = 1 if (value == 0) else 0
+        elif instruction == 'STX':
+            self.write(operand, self.x_index_register)
+        elif instruction == 'SAX':
+            self.write(operand, self.x_index_register & self.accumulator)
+        elif instruction == 'STY':
+            self.write(operand, self.y_index_register)
+        elif instruction == 'ADC':
+            operand = self.read(operand)
+            result = operand + self.accumulator + (1 if self.status_register.bit0 else 0)
+            self.status_register.bit0 = 1 if (result >> 8) else 0
+            result &= 0xff
+            self.status_register.bit6 = 1 if (
+                    not ((self.accumulator ^ operand) & 0x80) and ((self.accumulator ^ result) & 0x80)) else 0
+            self.accumulator = result
+            self.status_register.bit7 = 1 if (result & 0x80) else 0
+            self.status_register.bit1 = 1 if (result == 0) else 0
+        elif instruction == 'SBC':
+            operand = self.read(operand)
+            result = self.accumulator - operand - (0 if self.status_register.bit0 else 1)
+            self.status_register.bit0 = result >= 0
+            result &= 0xff
+            self.status_register.bit6 = 1 if (
+                    ((self.accumulator ^ operand) & 0x80) and ((self.accumulator ^ result) & 0x80)) else 0
+            self.accumulator = result
+            self.status_register.bit7 = 1 if (result & 0x80) else 0
+            self.status_register.bit1 = 1 if (result == 0) else 0
+        elif instruction == 'INC':
+            value = self.read(operand)
+            value += 1
+            value &= 0xff
+            self.write(operand, value)
+            self.status_register.bit7 = 1 if (value & 0x80) else 0
+            self.status_register.bit1 = 1 if (value == 0) else 0
+        elif instruction == 'DEC':
+            value = self.read(operand)
+            value -= 1
+            value &= 0xff
+            self.write(operand, value)
+            self.status_register.bit7 = 1 if (value & 0x80) else 0
+            self.status_register.bit1 = 1 if (value == 0) else 0
+        elif instruction == 'INX':
+            self.x_index_register += 1
+            self.x_index_register &= 0xff
+            self.status_register.bit7 = 1 if (self.x_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.x_index_register == 0) else 0
+        elif instruction == 'DEX':
+            self.x_index_register -= 1
+            self.x_index_register &= 0xff
+            self.status_register.bit7 = 1 if (self.x_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.x_index_register == 0) else 0
+        elif instruction == 'INY':
+            self.y_index_register += 1
+            self.y_index_register &= 0xff
+            self.status_register.bit7 = 1 if (self.y_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.y_index_register == 0) else 0
+        elif instruction == 'DEY':
+            self.y_index_register -= 1
+            self.y_index_register &= 0xff
+            self.status_register.bit7 = 1 if (self.y_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.y_index_register == 0) else 0
+        elif instruction == 'TAX':
+            self.x_index_register = self.accumulator
+            self.status_register.bit7 = 1 if (self.x_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.x_index_register == 0) else 0
+        elif instruction == 'TAY':
+            self.y_index_register = self.accumulator
+            self.status_register.bit7 = 1 if (self.y_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.y_index_register == 0) else 0
+        elif instruction == 'TXA':
+            self.accumulator = self.x_index_register
+            self.status_register.bit7 = 1 if (self.x_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.x_index_register == 0) else 0
+        elif instruction == 'TYA':
+            self.accumulator = self.y_index_register
+            self.status_register.bit7 = 1 if (self.y_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.y_index_register == 0) else 0
+        elif instruction == 'TSX':
+            self.x_index_register = self.stack_pointer
+            self.status_register.bit7 = 1 if (self.x_index_register & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.x_index_register == 0) else 0
+        elif instruction == 'TXS':
+            self.stack_pointer = self.x_index_register
+        elif instruction == 'JSR':
+            self.program_counter -= 1
+            self.push(self.program_counter >> 8)
+            self.push(self.program_counter & 0xff)
+            self.program_counter = operand
+        elif instruction == 'RTS':
+            self.program_counter = self.pop()
+            self.program_counter |= self.pop() << 8
+            self.program_counter += 1
+        elif instruction == 'RTI':
+            self.status_register.value = self.pop() | 0x20
+            self.status_register.bit4 = 0
+            self.status_register.bit5 = 1
+            self.program_counter = self.pop()
+            self.program_counter |= self.pop() << 8
+        elif instruction == 'SEC':
+            self.status_register.bit0 = 1
+        elif instruction == 'SEI':
+            self.status_register.bit2 = 1
+        elif instruction == 'SED':
+            self.status_register.bit3 = 1
+        elif instruction == 'CLD':
+            self.status_register.bit3 = 0
+        elif instruction == 'CLV':
+            self.status_register.bit6 = 0
+        elif instruction == 'BCS':
+            if self.status_register.bit0:
+                self.cpu_cycle += 2 if self.program_counter >> 8 != operand >> 8 else 1
+                self.program_counter = operand
+        elif instruction == 'CLC':
+            self.status_register.bit0 = 0
+        elif instruction == 'NOP':
+            pass
+        elif instruction == 'BCC':
+            if not self.status_register.bit0:
+                self.cpu_cycle += 2 if self.program_counter >> 8 != operand >> 8 else 1
+                self.program_counter = operand
+        elif instruction == 'LDA':
+            self.accumulator = self.read(operand)
+            self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+        elif instruction == 'STA':
+            self.write(operand, self.accumulator)
+        elif instruction == 'BEQ':
+            if self.status_register.bit1:
+                self.cpu_cycle += 2 if self.program_counter >> 8 != operand >> 8 else 1
+                self.program_counter = operand
+        elif instruction == 'BNE':
+            if not self.status_register.bit1:
+                self.cpu_cycle += 2 if self.program_counter >> 8 != operand >> 8 else 1
+                self.program_counter = operand
+        elif instruction == 'BIT':
+            value = self.read(operand)
+            self.status_register.bit6 = (value >> 6) & 1
+            self.status_register.bit7 = (value >> 7) & 1
+            self.status_register.bit1 = 0 if (self.accumulator & value) else 1
+        elif instruction == 'BVS':
+            if self.status_register.bit6:
+                self.cpu_cycle += 2 if self.program_counter >> 8 != operand >> 8 else 1
+                self.program_counter = operand
+        elif instruction == 'BVC':
+            if not self.status_register.bit6:
+                self.cpu_cycle += 2 if self.program_counter >> 8 != operand >> 8 else 1
+                self.program_counter = operand
+        elif instruction == 'BMI':
+            if self.status_register.bit7:
+                self.cpu_cycle += 2 if self.program_counter >> 8 != operand >> 8 else 1
+                self.program_counter = operand
+        elif instruction == 'BPL':
+            if not self.status_register.bit7:
+                self.cpu_cycle += 2 if self.program_counter >> 8 != operand >> 8 else 1
+                self.program_counter = operand
+        elif instruction == 'PHA':
+            self.push(self.accumulator)
+        elif instruction == 'PLA':
+            self.accumulator = self.pop()
+            self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+        elif instruction == 'PHP':
+            self.push(self.status_register.value | 0x10)
+        elif instruction == 'PLP':
+            self.status_register.value = self.pop() | 0x20
+            self.status_register.bit4 = 0
+        elif instruction == 'AND':
+            self.accumulator &= self.read(operand)
+            self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+        elif instruction == 'ORA':
+            self.accumulator |= self.read(operand)
+            self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+        elif instruction == 'EOR':
+            self.accumulator ^= self.read(operand)
+            self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+        elif instruction == 'CMP':
+            result = self.accumulator - self.read(operand)
+            self.status_register.bit0 = result >= 0
+            self.status_register.bit7 = 1 if (result & 0x80) else 0
+            self.status_register.bit1 = 1 if (result == 0) else 0
+        elif instruction == 'CPX':
+            operand = self.read(operand)
+            result = self.x_index_register - operand
+            self.status_register.bit0 = result >= 0
+            self.status_register.bit7 = 1 if (result & 0x80) else 0
+            self.status_register.bit1 = 1 if (result == 0) else 0
+        elif instruction == 'CPY':
+            operand = self.read(operand)
+            result = self.y_index_register - operand
+            self.status_register.bit0 = result >= 0
+            self.status_register.bit7 = 1 if (result & 0x80) else 0
+            self.status_register.bit1 = 1 if (result == 0) else 0
+        elif instruction == 'LSR':
+            if addressing_mode == 1:
+                self.status_register.bit0 = 1 if (self.accumulator & 1) else 0
+                self.accumulator >>= 1
+                self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+                self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+            else:
+                value = self.read(operand)
+                self.status_register.bit0 = 1 if (value & 1) else 0
+                value >>= 1
+                self.write(operand, value)
+                self.status_register.bit7 = 1 if (value & 0x80) else 0
+                self.status_register.bit1 = 1 if (value == 0) else 0
+        elif instruction == 'ROR':
+            value = self.accumulator
+            if addressing_mode != 1:
+                value = self.read(operand)
+            if self.status_register.bit0:
+                value |= 0x100
+            self.status_register.bit0 = value & 1
+            value >>= 1
+            value &= 0xff
+            self.status_register.bit7 = 1 if (value & 0x80) else 0
+            self.status_register.bit1 = 1 if (value == 0) else 0
+            if addressing_mode == 1:
+                self.accumulator = value
+            else:
+                self.write(operand, value)
+        elif instruction == 'ROL':
+            value = self.accumulator
+            if 1 != addressing_mode:
+                value = self.read(operand)
+            value <<= 1
+            if self.status_register.bit0:
+                value |= 0x1
+            self.status_register.bit0 = value > 0xff
+            value &= 0xff
+            self.status_register.bit7 = 1 if (value & 0x80) else 0
+            self.status_register.bit1 = 1 if (value == 0) else 0
+            if addressing_mode == 1:
+                self.accumulator = value
+            else:
+                self.write(operand, value)
+        elif instruction == 'ASL':
+            if addressing_mode == 1:
+                self.status_register.bit0 = 1 if (self.accumulator >> 7) else 0
+                self.accumulator <<= 1
+                self.accumulator &= 0xff
+                self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+                self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+            else:
+                value = self.read(operand)
+                self.status_register.bit0 = 1 if (value >> 7) else 0
+                value <<= 1
+                value &= 0xff
+                self.write(operand, value)
+                self.status_register.bit7 = 1 if (value & 0x80) else 0
+                self.status_register.bit1 = 1 if (value == 0) else 0
+
+
+        elif instruction == 'DCP':
+            value = (self.read(operand) - 1) & 0xff
+            self.write(operand, value)
+            result = self.accumulator - value
+            self.status_register.bit0 = result >= 0
+            self.status_register.bit7 = 1 if (result & 0x80) else 0
+            self.status_register.bit1 = 1 if (result == 0) else 0
+        elif instruction == 'ISC':
+            value = (self.read(operand) + 1) & 0xff
+            self.write(operand, value)
+            result = self.accumulator - value - (0 if self.status_register.bit0 else 1)
+
+            self.status_register.bit0 = result >= 0
+            result &= 0xff
+            self.status_register.bit6 = 1 if (
+                    ((self.accumulator ^ operand) & 0x80) and ((self.accumulator ^ result) & 0x80)) else 0
+            self.accumulator = result
+            self.status_register.bit7 = 1 if (result & 0x80) else 0
+            self.status_register.bit1 = 1 if (result == 0) else 0
+        elif instruction == 'SLO':
+            value = self.read(operand)
+            self.status_register.bit0 = 1 if (value >> 7) else 0
+            value <<= 1
+            value &= 0xff
+            self.write(operand, value)
+            self.accumulator |= value
+            self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+        elif instruction == 'SRE':
+            value = self.read(operand)
+            self.status_register.bit0 = 1 if (value & 1) else 0
+            value >>= 1
+            self.write(operand, value)
+            self.accumulator ^= value
+            self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+        elif instruction == 'RLA':
+            value = self.read(operand)
+            value <<= 1
+            if self.status_register.bit0:
+                value |= 0x1
+            self.status_register.bit0 = 1 if (value > 0xff) else 0
+            self.write(operand, value & 0xff)
+            self.accumulator &= (value & 0xff)
+            self.status_register.bit7 = 1 if (self.accumulator & 0x80) else 0
+            self.status_register.bit1 = 1 if (self.accumulator == 0) else 0
+        elif instruction == 'RRA':
+            value = self.read(operand)
+            if self.status_register.bit0:
+                value |= 0x100
+            self.status_register.bit0 = value & 1
+            value >>= 1
+            value &= 0xff
+            self.write(operand, value)
+
+            value2 = self.accumulator + value + (1 if self.status_register.bit0 else 0)
+            self.status_register.bit0 = 1 if (value2 >> 8) else 0
+            value2 &= 0xff
+            self.status_register.bit6 = 1 if (
+                    not ((self.accumulator ^ value) & 0x80) and ((self.accumulator ^ value2) & 0x80)) else 0
+            self.accumulator = value2
+            self.status_register.bit7 = 1 if (value2 & 0x80) else 0
+            self.status_register.bit1 = 1 if (value2 == 0) else 0
+        elif instruction == 'BRK':
+            self.program_counter += 1
+            self.push(self.program_counter >> 8)
+            self.push(self.program_counter & 0xFF)
+            self.push(self.status_register.value)
+            self.program_counter |= self.read(self._IRQ + 1) << 8
