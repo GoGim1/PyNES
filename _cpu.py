@@ -1,6 +1,6 @@
 from tools.tool import fromat, list_to_hex_str
-# from c_cpu_addressing import addressing
-from cpu_addressing import addressing
+from c_cpu_addressing import addressing
+#from cpu_addressing import addressing
 from cpu_instr import *
 from register import Register
 
@@ -119,7 +119,7 @@ class CPU(object):
         else:
             assert 0, "TODO"
 
-    def exec(self):
+    def exec_op(self):
         index = self.read(self.program_counter)
         instruction, addressing_mode, instr_bytes, cycles = self.op_detail[index][0], self.op_detail[index][
             1], self.op_detail[index][2], self.op_detail[index][3]

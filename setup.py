@@ -21,6 +21,15 @@ setup(ext_modules = cythonize([Extension(
     libraries=[],
     extra_compile_args=[],
     extra_link_args=[]
+    ),
+    Extension(
+        'c_cpu',
+        sources=['cpu.pyx'],
+        language='c++',
+        include_dirs=[numpy.get_include()],
+        library_dirs=[],
+        libraries=[],
+        extra_compile_args=[],
+        extra_link_args=[]
     )
-
 ]))

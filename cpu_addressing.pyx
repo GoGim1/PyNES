@@ -1,5 +1,3 @@
-cimport cython
-
 _accumulator = 1
 _implied_addressing = 2
 _immediate_addressing = 3
@@ -18,8 +16,6 @@ _absolute_x_indexed_addressing_check_oops = 14
 _absolute_y_indexed_addressing_check_oops = 15
 _post_indexed_indirect_addressing_check_oops = 16
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 def addressing(mode, cpu):
     if mode == _accumulator or mode == _implied_addressing:
         return
