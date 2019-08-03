@@ -1,3 +1,4 @@
+import numpy as np
 cimport numpy as np
 from libcpp.vector cimport vector
 from display import palette_data
@@ -28,7 +29,7 @@ from display import palette_data
 cdef void _render_background_cython(vector[int] pattern_tables, vector[int] name_tables, vector[int] palette, int bit4, np.ndarray[int, ndim=2] pixels):
         cdef int name_table_index, pattern_base, tile_id, pattern_tables_id, pattern1, pattern2, offset, p0, p1, shift, \
             mask, low, aid, attr, aoffset, high, index
-
+        cdef int x, y
         name_table_index = 0  # TODO
         pattern_base = 0x1000 if bit4 else 0
 

@@ -1,24 +1,25 @@
-_accumulator = 1
-_implied_addressing = 2
-_immediate_addressing = 3
-_absolute_addressing = 4
-_zero_page_absolute_addressing = 5
-_absolute_x_indexed_addressing = 6
-_absolute_y_indexed_addressing = 7
-_zero_page_x_indexed_addressing = 8
-_zero_page_y_indexed_addressing = 9
-_indirect_addressing = 10
-_pre_indexed_indirect_addressing = 11
-_post_indexed_indirect_addressing = 12
-_relative_addressing = 13
+cdef int _accumulator = 1
+cdef int _implied_addressing = 2
+cdef int _immediate_addressing = 3
+cdef int _absolute_addressing = 4
+cdef int _zero_page_absolute_addressing = 5
+cdef int _absolute_x_indexed_addressing = 6
+cdef int _absolute_y_indexed_addressing = 7
+cdef int _zero_page_x_indexed_addressing = 8
+cdef int _zero_page_y_indexed_addressing = 9
+cdef int _indirect_addressing = 10
+cdef int _pre_indexed_indirect_addressing = 11
+cdef int _post_indexed_indirect_addressing = 12
+cdef int _relative_addressing = 13
+cdef int _absolute_x_indexed_addressing_check_oops = 14
+cdef int _absolute_y_indexed_addressing_check_oops = 15
+cdef int _post_indexed_indirect_addressing_check_oops = 16
 
-_absolute_x_indexed_addressing_check_oops = 14
-_absolute_y_indexed_addressing_check_oops = 15
-_post_indexed_indirect_addressing_check_oops = 16
+cdef int addr, bug_addr, operand, ret
 
-def addressing(mode, cpu):
+cdef int _addressing(int mode, object cpu):
     if mode == _accumulator or mode == _implied_addressing:
-        return
+        return 0
     elif mode == _immediate_addressing:
         return cpu.program_counter + 1
     elif mode == _absolute_addressing:
@@ -67,3 +68,6 @@ def addressing(mode, cpu):
 
     else:
         assert 0, 'Error addressing mode!'
+
+def addressing(int mode, cpu):
+    return _addressing(mode, cpu)

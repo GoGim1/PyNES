@@ -1,11 +1,39 @@
-from tools.tool import fromat, list_to_hex_str
+# cython: language_level=3
+
+from tools.tool import fromat
 from c_cpu_addressing import addressing
-#from cpu_addressing import addressing
-from cpu_instr import *
+from c_cpu_instr import *
 from register import Register
+from libcpp.vector cimport vector
 
 
-class CPU(object):
+cdef class CPU:
+    cdef public object file
+    cdef public int mmc_type
+    cdef public vector[int] main_memory
+    cdef public vector[int] save_memory
+    cdef public object ppu
+
+    cdef public object input_status
+    cdef public int input_mask
+    cdef public int input_index
+
+    cdef public int _NMI
+    cdef public int _RESET
+    cdef public int _IRQ
+
+    cdef public int program_counter
+    cdef public int accumulator
+    cdef public int x_index_register
+    cdef public int y_index_register
+    cdef public int stack_pointer
+    cdef public object status_register
+
+    cdef public long cpu_cycle
+
+    cdef public list op_detail
+
+    cdef public dict op_function
     def __init__(self, file, main_memory, save_memory, ppu):
         self.file = file
         self.mmc_type = 0
@@ -54,15 +82,29 @@ class CPU(object):
                           ('BEQ',13,2,2),('SBC',16,2,5),'STP',        ('ISC',12,2,8),('NOP',8,2,4),('SBC',8,2,4),('INC',8,2,6),('ISC',8,2,6),('SED',2,1,2),('SBC',15,3,4),('NOP',2,1,2),('ISC',7, 3,7),('NOP',14,3,4),('SBC',14,3,4),('INC',6, 3,7),('ISC',6, 3,7),  # F
                           ]
 
-    def push(self, data):
+
+        self.op_function =  {
+            'JMP': JMP, 'LDX': LDX, 'LAX': LAX, 'LDY': LDY, 'LAY': LAY, 'STX': STX, 'SAX': SAX,
+            'STY': STY, 'ADC': ADC, 'SBC': SBC, 'INC': INC, 'DEC': DEC, 'INX': INX, 'DEX': DEX,
+            'INY': INY, 'DEY': DEY, 'TAX': TAX, 'TAY': TAY, 'TXA': TXA, 'TYA': TYA, 'TSX': TSX,
+            'TXS': TXS, 'JSR': JSR, 'RTS': RTS, 'RTI': RTI, 'SEC': SEC, 'SEI': SEI, 'SED': SED,
+            'CLD': CLD, 'CLV': CLV, 'BCS': BCS, 'CLC': CLC, 'NOP': NOP, 'BCC': BCC, 'LDA': LDA,
+            'STA': STA, 'BEQ': BEQ, 'BNE': BNE, 'BIT': BIT, 'BVS': BVS, 'BVC': BVC, 'BMI': BMI,
+            'BPL': BPL, 'PHA': PHA, 'PLA': PLA, 'PHP': PHP, 'PLP': PLP, 'AND': AND, 'ORA': ORA,
+            'EOR': EOR, 'CMP': CMP, 'CPX': CPX, 'CPY': CPY, 'LSR': LSR, 'ROR': ROR, 'ROL': ROL,
+            'ASL': ASL, 'DCP': DCP, 'SLO': SLO, 'SRE': SRE, 'ISC': ISC, 'RLA': RLA, 'RRA': RRA,
+            'BRK': BRK
+        }
+
+    cpdef void push(self, int data):
         self.write(0x100 | self.stack_pointer, data)
         self.stack_pointer = (self.stack_pointer - 1) & 0xff
 
-    def pop(self):
+    cpdef int pop(self):
         self.stack_pointer = (self.stack_pointer + 1) & 0xff
         return self.read(0x100 | self.stack_pointer)
 
-    def read(self, addr):
+    cpdef int read(self, int addr):
         if self.mmc_type == 0:
             if 0x8000 <= addr < 0xc000:
                 return self.file.prg_rom[:0x4000][addr & 0x3fff]
@@ -88,7 +130,7 @@ class CPU(object):
         else:
             assert 0, "TODO"
 
-    def write(self, addr, data):
+    cpdef write(self, int addr, int data):
         if self.mmc_type == 0:
             if 0 <= addr < 0x2000:
                 self.main_memory[addr & 0x7ff] = data
@@ -119,30 +161,22 @@ class CPU(object):
         else:
             assert 0, "TODO"
 
-    def exec_op(self):
+    cpdef void exec_op(self):
+        cdef int index, addressing_mode, instr_bytes, operand, cycles
+        cdef str instruction
+
         index = self.read(self.program_counter)
-        instruction, addressing_mode, instr_bytes, cycles = self.op_detail[index][0], self.op_detail[index][
-            1], self.op_detail[index][2], self.op_detail[index][3]
+        op_detail = self.op_detail[index]
+        instruction, addressing_mode, instr_bytes, cycles = op_detail[0], op_detail[1], op_detail[2], op_detail[3]
 
         operand = addressing(addressing_mode, self)
         self.program_counter += instr_bytes
 
-        {
-            'JMP': JMP, 'LDX': LDX, 'LAX': LAX, 'LDY': LDY, 'LAY': LAY, 'STX': STX, 'SAX': SAX,
-            'STY': STY, 'ADC': ADC, 'SBC': SBC, 'INC': INC, 'DEC': DEC, 'INX': INX, 'DEX': DEX,
-            'INY': INY, 'DEY': DEY, 'TAX': TAX, 'TAY': TAY, 'TXA': TXA, 'TYA': TYA, 'TSX': TSX,
-            'TXS': TXS, 'JSR': JSR, 'RTS': RTS, 'RTI': RTI, 'SEC': SEC, 'SEI': SEI, 'SED': SED,
-            'CLD': CLD, 'CLV': CLV, 'BCS': BCS, 'CLC': CLC, 'NOP': NOP, 'BCC': BCC, 'LDA': LDA,
-            'STA': STA, 'BEQ': BEQ, 'BNE': BNE, 'BIT': BIT, 'BVS': BVS, 'BVC': BVC, 'BMI': BMI,
-            'BPL': BPL, 'PHA': PHA, 'PLA': PLA, 'PHP': PHP, 'PLP': PLP, 'AND': AND, 'ORA': ORA,
-            'EOR': EOR, 'CMP': CMP, 'CPX': CPX, 'CPY': CPY, 'LSR': LSR, 'ROR': ROR, 'ROL': ROL,
-            'ASL': ASL, 'DCP': DCP, 'SLO': SLO, 'SRE': SRE, 'ISC': ISC, 'RLA': RLA, 'RRA': RRA,
-            'BRK': BRK
-        }[instruction](addressing_mode, self, operand)
+        self.op_function[instruction](addressing_mode, self, operand)
 
         self.cpu_cycle += cycles
 
-    def nmi(self):
+    cpdef void nmi(self):
         if self.ppu.ppu_ctrl.value & 0x80:
             self.push(self.program_counter >> 8)
             self.push(self.program_counter)
@@ -152,8 +186,7 @@ class CPU(object):
             haddr = self.read(self._NMI + 1)
             self.program_counter = laddr | haddr << 8
 
-    def disassemble(self):
-        def _get_operands(mode, param):
+    cdef _get_operands(self, mode, param):
             if mode == 1:
                 return 'A'
             elif mode == 2:
@@ -183,6 +216,7 @@ class CPU(object):
             else:
                 assert 0, 'Error addressing mode!'
 
+    cpdef disassemble(self):
         addr = self.program_counter
         op_index = self.read(addr)
         instruction, addressing_mode, instr_bytes = self.op_detail[op_index][0], self.op_detail[op_index][1], self.op_detail[op_index][2]
@@ -193,7 +227,7 @@ class CPU(object):
         # print('%s  %s %-7s ' % (fromat(addr), fromat(op_index), list_to_hex_str(operand_bytes)), end='')
         # print('%s  ' % (fromat(addr)), end='')
 
-        operands = _get_operands(addressing_mode, operand_bytes)
+        operands = self._get_operands(addressing_mode, operand_bytes)
         #print('%s %-7s ' % (instruction, operands), end='')
 
         # print('A:%s X:%s Y:%s P:%s SP:%s' % (

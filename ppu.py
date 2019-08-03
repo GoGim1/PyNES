@@ -127,7 +127,7 @@ class PPU(object):
             if y > 0xEF:
                 continue
             if is_8x16_mode:
-                pattern1 = pattern_index // 2 * 0x20 + (0 if x % 2 else 0x1000)
+                pattern1 = pattern_index // 2 * 0x20 + (0x1000 if pattern_index % 2 else 0)
                 pattern2 = pattern1 + 16
             else:
                 pattern1 = pattern_base | pattern_index * 16
@@ -135,6 +135,8 @@ class PPU(object):
 
             high = (attr & 3) << 2
             for yy in range(16 if is_8x16_mode else 8):
+                if y + yy > 239:
+                    continue
                 for xx in range(8):
                     p0 = self.pattern_tables[pattern1 + yy]
                     p1 = self.pattern_tables[pattern2 + yy]
@@ -144,6 +146,8 @@ class PPU(object):
 
                     low = ((p0 & mask) >> shift) | ((p1 & mask) >> shift << 1)
                     if low == 0:
+                        continue
+                    if x + xx > 255:
                         continue
                     self.pixels[x + xx, y + yy] = palette_data[self.palette[0x10 + high | low]]
 

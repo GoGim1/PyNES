@@ -110,8 +110,8 @@ class Debugger(Emulator):
         self.pattern_tables = self.debugger_screen.subsurface((256, 0), (256, 128))
         self.name_tables = self.debugger_screen.subsurface((0, 240), (256 * 2, 240))
 
-        self.pattern_tables_pixels = np.array([[(0, 0, 0) for _ in range(128)] for _ in range(256)])
-        self.name_tables_pixels = np.array([[(0,0,0) for _ in range(240)] for _ in range(256*2)])
+        self.pattern_tables_pixels = np.array([[0 for _ in range(128)] for _ in range(256)])
+        self.name_tables_pixels = np.array([[0 for _ in range(240)] for _ in range(256*2)])
 
     def run(self):
         super().run()

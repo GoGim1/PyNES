@@ -1,6 +1,5 @@
 from tools.tool import fromat, list_to_hex_str
-from c_cpu_addressing import addressing
-#from cpu_addressing import addressing
+from _cpu_addressing import addressing
 from cpu_instr import *
 from register import Register
 
@@ -53,6 +52,18 @@ class CPU(object):
                           ('CPX',3, 2,2),('SBC',11,2,6),('NOP',3,2,2),('ISC',11,2,8),('CPX',5,2,3),('SBC',5,2,3),('INC',5,2,5),('ISC',5,2,5),('INX',2,1,2),('SBC',3, 2,2),('NOP',2,1,2),('SBC',3, 2,2),('CPX',4, 3,4),('SBC',4, 3,4),('INC',4, 3,6),('ISC',4, 3,6),  # E
                           ('BEQ',13,2,2),('SBC',16,2,5),'STP',        ('ISC',12,2,8),('NOP',8,2,4),('SBC',8,2,4),('INC',8,2,6),('ISC',8,2,6),('SED',2,1,2),('SBC',15,3,4),('NOP',2,1,2),('ISC',7, 3,7),('NOP',14,3,4),('SBC',14,3,4),('INC',6, 3,7),('ISC',6, 3,7),  # F
                           ]
+        self.op_function = {
+            'JMP': JMP, 'LDX': LDX, 'LAX': LAX, 'LDY': LDY, 'LAY': LAY, 'STX': STX, 'SAX': SAX,
+            'STY': STY, 'ADC': ADC, 'SBC': SBC, 'INC': INC, 'DEC': DEC, 'INX': INX, 'DEX': DEX,
+            'INY': INY, 'DEY': DEY, 'TAX': TAX, 'TAY': TAY, 'TXA': TXA, 'TYA': TYA, 'TSX': TSX,
+            'TXS': TXS, 'JSR': JSR, 'RTS': RTS, 'RTI': RTI, 'SEC': SEC, 'SEI': SEI, 'SED': SED,
+            'CLD': CLD, 'CLV': CLV, 'BCS': BCS, 'CLC': CLC, 'NOP': NOP, 'BCC': BCC, 'LDA': LDA,
+            'STA': STA, 'BEQ': BEQ, 'BNE': BNE, 'BIT': BIT, 'BVS': BVS, 'BVC': BVC, 'BMI': BMI,
+            'BPL': BPL, 'PHA': PHA, 'PLA': PLA, 'PHP': PHP, 'PLP': PLP, 'AND': AND, 'ORA': ORA,
+            'EOR': EOR, 'CMP': CMP, 'CPX': CPX, 'CPY': CPY, 'LSR': LSR, 'ROR': ROR, 'ROL': ROL,
+            'ASL': ASL, 'DCP': DCP, 'SLO': SLO, 'SRE': SRE, 'ISC': ISC, 'RLA': RLA, 'RRA': RRA,
+            'BRK': BRK
+        }
 
     def push(self, data):
         self.write(0x100 | self.stack_pointer, data)
@@ -121,24 +132,13 @@ class CPU(object):
 
     def exec_op(self):
         index = self.read(self.program_counter)
-        instruction, addressing_mode, instr_bytes, cycles = self.op_detail[index][0], self.op_detail[index][
-            1], self.op_detail[index][2], self.op_detail[index][3]
+        op_detail = self.op_detail[index]
+        instruction, addressing_mode, instr_bytes, cycles = op_detail[0], op_detail[1], op_detail[2], op_detail[3]
 
         operand = addressing(addressing_mode, self)
         self.program_counter += instr_bytes
 
-        {
-            'JMP': JMP, 'LDX': LDX, 'LAX': LAX, 'LDY': LDY, 'LAY': LAY, 'STX': STX, 'SAX': SAX,
-            'STY': STY, 'ADC': ADC, 'SBC': SBC, 'INC': INC, 'DEC': DEC, 'INX': INX, 'DEX': DEX,
-            'INY': INY, 'DEY': DEY, 'TAX': TAX, 'TAY': TAY, 'TXA': TXA, 'TYA': TYA, 'TSX': TSX,
-            'TXS': TXS, 'JSR': JSR, 'RTS': RTS, 'RTI': RTI, 'SEC': SEC, 'SEI': SEI, 'SED': SED,
-            'CLD': CLD, 'CLV': CLV, 'BCS': BCS, 'CLC': CLC, 'NOP': NOP, 'BCC': BCC, 'LDA': LDA,
-            'STA': STA, 'BEQ': BEQ, 'BNE': BNE, 'BIT': BIT, 'BVS': BVS, 'BVC': BVC, 'BMI': BMI,
-            'BPL': BPL, 'PHA': PHA, 'PLA': PLA, 'PHP': PHP, 'PLP': PLP, 'AND': AND, 'ORA': ORA,
-            'EOR': EOR, 'CMP': CMP, 'CPX': CPX, 'CPY': CPY, 'LSR': LSR, 'ROR': ROR, 'ROL': ROL,
-            'ASL': ASL, 'DCP': DCP, 'SLO': SLO, 'SRE': SRE, 'ISC': ISC, 'RLA': RLA, 'RRA': RRA,
-            'BRK': BRK
-        }[instruction](addressing_mode, self, operand)
+        self.op_function[instruction](addressing_mode, self, operand)
 
         self.cpu_cycle += cycles
 
